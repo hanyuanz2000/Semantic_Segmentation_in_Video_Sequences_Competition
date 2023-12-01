@@ -4,8 +4,7 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-from transform_func import SegmentationTrainingTransform, SegmentationValidationTransform
-
+from utils.transform import SegmentationTrainingTransform, SegmentationValidationTransform
 
 class VideoFrameDataset(Dataset):
     def __init__(self, root_dir, subset='train', transform=None):
@@ -67,10 +66,12 @@ def test(subset, transform=None):
 
     for i_batch, sample_batched in enumerate(dataloader):
         frames, mask = sample_batched
+        concatenated_frames = torch.cat(frames, dim=1)
         print(f'Batch {i_batch + 1}:')
         print(f'  Number of frames in batch: {len(frames)}')
         print(f'  Frame size: {frames[0].size()}')
         print(f'  Mask size: {mask.size()}')
+        print(f'  Concatenated frames size: {concatenated_frames.size()}')
 
         # Test only the first batch
         if i_batch == 0:
@@ -84,5 +85,5 @@ if __name__ == '__main__':
     
 
     test('train', transform=train_transform)
-    test('val', transform=val_transform)
-    test('unlabeled')
+    # test('val', transform=val_transform)
+    # test('unlabeled')
