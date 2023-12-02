@@ -1,0 +1,3 @@
+INFO: Initializing training on 1000 training images and 1000 validation images
+INFO: Using device mps
+ERROR: Error during training: tuple indices must be integers or slices, not str

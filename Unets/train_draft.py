@@ -47,7 +47,7 @@ input_channel = 33  # 3 RGB channels per frame, 11 frames
 output_channel = 22  # 22 classes for segmentation
 
 # Initialize the UNet model
-model = UNet(input_channel, output_channel)  # Replace with your UNet architecture
+model = UNet(input_channel, output_channel)
 model.to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -83,7 +83,7 @@ for epoch in range(num_epochs):
         running_loss += loss.item()
         # Use i+1 as the denominator to calculate the average loss
         train_bar.set_postfix(loss=(running_loss / (i + 1)))
-        
+
     print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {running_loss / len(train_loader)}")
 
 print("Training completed")
