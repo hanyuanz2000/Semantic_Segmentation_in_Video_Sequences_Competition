@@ -6,7 +6,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from unet.unet_model import UNet
-from utils import data_loading, transform
+from utils import customized_transform, data_loading
 from basic_config import root_dir
 
 # Set random seed for reproducibility
@@ -32,8 +32,8 @@ num_epochs = 1
 batch_size = 8
 
 # Set transforms
-train_transform = transform.SegmentationTrainingTransform()
-val_transform = transform.SegmentationValidationTransform()
+train_transform = customized_transform.SegmentationTrainingTransform()
+val_transform = customized_transform.SegmentationValidationTransform()
 
 # Initialize dataset and dataloader
 train_dataset = data_loading.VideoFrameDataset(root_dir=root_dir, subset='train', transform=train_transform)

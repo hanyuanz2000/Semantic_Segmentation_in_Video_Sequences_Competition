@@ -10,14 +10,19 @@ from tqdm import tqdm
 import wandb
 from pathlib import Path
 import os
+import torchmetrics
 
 # Your custom modules
 from unet.unet_model import UNet
-from utils import data_loading, transform
+from utils import data_loading
+from utils import customized_transform
 from basic_config import root_dir
 from utils.dice_score import dice_loss
-from evaluate import evaluate  # Make sure this is properly defined
+from evaluate import evaluate
 from datetime import datetime
+
+os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
+# export PYTORCH_ENABLE_MPS_FALLBACK=1
 
 # Function to parse arguments
 def get_args():
@@ -29,35 +34,37 @@ def get_args():
 def train_model(
         model, 
         device, 
+        train_transform,
+        val_transform,
+        model_name: str = 'Unet_Direct_Pred',
         epochs: int = 1, 
-        batch_size: int = 8,
-        learning_rate: float = 1e-5,
-        weight_decay: float = 1e-8,
+        batch_size: int = 4,
+        learning_rate: float = 1e-2,
+        weight_decay: float = 1e-6,
         momentum: float = 0.9,
-        graient_clipping: float = 1.0,
+        gradient_clipping: float = 1.0,
         save_checkpoint: bool = True,
         amp: bool = False,
     ):
 
     # set experiment name
     now = datetime.now()
-    dt_string = now.strftime("%d-%m-%Y_%H-%M-%S")
-    experiment_name = f'Unet_{dt_string}'
+    dt_string = now.strftime("%d-%H:%M")
+    experiment_name = f'{dt_string}_lr{learning_rate}_bs{batch_size}_wd{weight_decay}_mom{momentum}_gc{gradient_clipping}'
     print(f'Experiment name: {experiment_name}')
+    
     # Initialize Weights & Biases logging
-    experiment = wandb.init(project='VideoFrameSegmentation_with_Unet', name=experiment_name, config={
+    experiment = wandb.init(project='VideoFrameSegmentation', name=experiment_name, config={
+        "model_name": model_name,   
         "learning_rate": learning_rate,
         "epochs": epochs,
         "batch_size": batch_size,
         "weight_decay": weight_decay,
         "momentum": momentum,
-        "gradient_clipping": graient_clipping,
+        "gradient_clipping": gradient_clipping,
     })
 
-    # Initialize dataset
-    train_transform = transform.SegmentationTrainingTransform()
-    val_transform = transform.SegmentationValidationTransform()
-
+    # load data
     train_set = data_loading.VideoFrameDataset(root_dir=root_dir, subset='train', transform=train_transform)
     val_set = data_loading.VideoFrameDataset(root_dir=root_dir, subset='val', transform=val_transform)
     n_train, n_val = len(train_set), len(val_set)
@@ -75,10 +82,16 @@ def train_model(
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)
     criterion = nn.CrossEntropyLoss()
 
+    # Initialize Jaccard Index
+    jaccard = torchmetrics.JaccardIndex(task="multiclass", num_classes=model.n_classes).to(device)
+    best_jac = 0.0
+    best_model_path = None
+
     # Training loop
     for epoch in range(epochs):
         model.train()
         epoch_loss = 0
+        epoch_jaccard = 0
 
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
@@ -90,9 +103,6 @@ def train_model(
                 true_masks = true_masks.to(device,  dtype=torch.long)
 
                 masks_pred = model(frames)
-                # check dimensions
-                # print(f'masks_pred size: {masks_pred.size()}')
-                # print(f'true_masks size: {true_masks.size()}')
 
                 loss = criterion(masks_pred, true_masks)
 
@@ -106,6 +116,11 @@ def train_model(
                     loss_dice = dice_loss(masks_pred_softmax, true_masks_one_hot, multiclass=True)
                     loss += loss_dice
 
+                # Calculate Jaccard Index
+                mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
+                jac_score = jaccard(mask_pred_argmax, true_masks).item()
+                epoch_jaccard += jac_score
+
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -116,19 +131,35 @@ def train_model(
                 experiment.log({"loss": loss.item()})
 
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
+            
 
             # Validation part after each epoch
-            val_score = evaluate(model, val_loader, device, amp)
-            scheduler.step(val_score)
+            val_jaccard = evaluate(model, val_loader, device, amp)
+            scheduler.step(val_jaccard)
 
-            logging.info(f'Epoch finished! Loss: {epoch_loss / len(train_loader)} Validation Dice Score: {val_score}')
-            wandb.log({"epoch": epoch, "loss": epoch_loss / len(train_loader), "validation score": val_score})
+            # Log metrics to Weights & Biases
+            average_jaccard = epoch_jaccard / len(train_loader)
+            experiment.log({"epoch": epoch, "loss": epoch_loss / len(train_loader), "jaccard": average_jaccard, "val_jaccard": val_jaccard})
+            logging.info(f'Epoch {epoch + 1}/{epochs}, Loss: {epoch_loss / len(train_loader)}, Jaccard: {average_jaccard}, Val_jaccard: {val_jaccard}')
+            
+            if save_checkpoint and val_jaccard> best_jac:
+                # If current model is better, delete the previous best model checkpoint
+                if best_model_path is not None and os.path.exists(best_model_path):
+                    os.remove(best_model_path)
 
-            if save_checkpoint:
+                # Save the current model checkpoint
                 Path('./checkpoints').mkdir(parents=True, exist_ok=True)
-                torch.save(model.state_dict(), f'./checkpoints/checkpoint_epoch{epoch}.pth')
+                best_jac = val_jaccard
+                best_model_path = f'./checkpoints/checkpoint_epoch{epoch}.pth'
+                torch.save(model.state_dict(), best_model_path)
+                logging.info(f'New best model saved at epoch {epoch + 1} with Jaccard score: {best_jac}')
 
     print("Training completed")
+    print(f'Best Jaccard score: {best_jac}')
+    if best_model_path:
+        print(f'Best model saved at {best_model_path}')
+    experiment.finish()
+
 
 # Main script execution
 if __name__ == '__main__':
@@ -150,6 +181,9 @@ if __name__ == '__main__':
 
     logging.info(f'Using device {device}')
 
+    train_transform = customized_transform.SegmentationTrainingTransform()
+    val_transform = customized_transform.SegmentationValidationTransform()
+
     # Initialize model
     # dimension of the input to the model
     input_channel = 33  # 3 RGB channels per frame, 11 frames
@@ -161,17 +195,12 @@ if __name__ == '__main__':
 
     train_model(
             model=model,
-            device=device
+            device=device,
+            train_transform=train_transform,
+            val_transform=val_transform,
         )
 
-    # try:
-    #     train_model(
-    #         model=model,
-    #         device=device
-    #     )
-    # except Exception as e:
-    #     logging.error(f'Error during training: {e}')
-
+   
 
 
 

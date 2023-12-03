@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
-from utils.transform import SegmentationTrainingTransform, SegmentationValidationTransform
 
 class VideoFrameDataset(Dataset):
     def __init__(self, root_dir, subset='train', transform=None):
@@ -35,6 +34,10 @@ class VideoFrameDataset(Dataset):
             frame_path = os.path.join(video_path, f'image_{i}.png')
             frame = Image.open(frame_path).convert("RGB")
             frames.append(frame)
+
+            # check dimension (frame is a PIL image)
+            # print(f'type of frame before transformation: {type(frame)}')
+            # print(f'frame size before transform: {frame.size}')
         
         # Labeled data
         if self.subset == 'train' or self.subset == 'val':
@@ -43,6 +46,9 @@ class VideoFrameDataset(Dataset):
         
             if self.transform:
                 frames, mask = self.transform(frames, mask)
+
+                # check dimension
+                # print(f'frame size after transform: {frames[0].size()}')
             else:
                 frames = transforms.ToTensor()(frames)
                 mask = transforms.ToTensor()(mask)
@@ -79,11 +85,11 @@ def test(subset, transform=None):
 
 if __name__ == '__main__':
     # Example usage and Test
-    root_dir = '/Users/zhanghanyuan/Downloads/Dataset_Student'
-    train_transform = SegmentationTrainingTransform()
-    val_transform = SegmentationValidationTransform()
-    
+    root_dir = '/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data'
 
-    test('train', transform=train_transform)
-    # test('val', transform=val_transform)
-    # test('unlabeled')
+    # Test transforms
+    from customized_transform import SegmentationTrainingTransform, SegmentationValidationTransform
+
+    test('train', transform=SegmentationTrainingTransform())
+    test('val', transform=SegmentationValidationTransform())
+    test('unlabeled')

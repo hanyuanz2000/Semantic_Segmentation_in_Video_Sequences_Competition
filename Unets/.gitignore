@@ -3,3 +3,6 @@ Data/
 *.npy
 __pycache__/
 checkpoints/
+logs/
+wandb/
+checkpoints/
