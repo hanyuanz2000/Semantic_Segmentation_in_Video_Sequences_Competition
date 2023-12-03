@@ -1,0 +1,4 @@
+# Semantic Segmentation in Video Sequences Competition
+Welcome to our NYU cutting-edge deep learning project developed for the NYU Deep Learning 2023 Fall Final Competition. Our project addresses the challenge of semantic segmentation in video sequences using a hybrid approach that integrates Convolutional Neural Networks (CNNs) and Transformers.
+
+In this project, we focus on analyzing synthetic video data, where each frame presents unique combinations of shapes, materials, and colors. Our goal is to employ a CNN as an efficient encoder to extract relevant spatial features from video frames and a Transformer as a predictor to understand the temporal dynamics across frames. By leveraging the strengths of both CNNs and Transformers, VisionTransformer aims to accurately predict the semantic segmentation mask of the final frame in a video sequence, based on its preceding frames.
