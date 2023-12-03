@@ -28,8 +28,8 @@ os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     
-    parser.add_argument('--epochs', type=int, default=1, help='Number of epochs')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=30, help='Number of epochs')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-6, help='Weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum')
