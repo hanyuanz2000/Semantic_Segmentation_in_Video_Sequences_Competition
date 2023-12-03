@@ -230,7 +230,9 @@ if __name__ == '__main__':
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         momentum=args.momentum,
-        gradient_clipping=args.gradient_clipping
+        gradient_clipping=args.gradient_clipping,
+        amp=args.amp,
+        model_name=args.model_name
     )
 
 
