@@ -2,7 +2,5 @@ Data/
 *.png
 *.npy
 __pycache__/
-checkpoints/
 logs/
 wandb/
-checkpoints/
