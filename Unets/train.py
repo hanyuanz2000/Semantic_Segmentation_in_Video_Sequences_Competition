@@ -56,18 +56,21 @@ def train_model(
         model_name
     ):
 
-    # set experiment name
+    # set project name and initialize experiment 
+    project_name = 'VideoFrameSegmentation' + '_' + model_name
+    
     now = datetime.now()
     dt_string = 'Dec' + now.strftime("%d") + '-' + now.strftime("%H:%M")
     config_string = f'lr{learning_rate}_bs{batch_size}_wd{weight_decay}_mom{momentum}_gc{gradient_clipping}'
     experiment_name = f'{dt_string}_{config_string}'
     logging.info(f'Experiment name: {experiment_name}')
-    
+
+    # Create a unique directory for this experiment204
     unique_dir = f'{model_name}_{dt_string}_{config_string}'
     checkpoint_dir = os.path.join('./checkpoints', unique_dir)
     
     # Initialize Weights & Biases logging
-    experiment = wandb.init(project='VideoFrameSegmentation', name=experiment_name, config={
+    experiment = wandb.init(project=project_name, name=experiment_name, config={
         "model_name": model_name,   
         "learning_rate": learning_rate,
         "epochs": epochs,
