@@ -1,2 +1,7 @@
 /Data
 /checkpoints
+**/*.pyc
+**/__pycache__/
+**/*.pth
+**/checkpoints/
+**/wandb/

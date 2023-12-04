@@ -13,7 +13,7 @@ import os
 import torchmetrics
 
 # Your custom modules
-from models.unet_model import UNet
+from unet.unet_model import UNet
 from utils import data_loading
 from utils import customized_transform
 from basic_config import root_dir
@@ -240,8 +240,3 @@ if __name__ == '__main__':
 
 
    
-
-
-
-
-
