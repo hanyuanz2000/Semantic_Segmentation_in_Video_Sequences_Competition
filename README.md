@@ -16,10 +16,6 @@ We are exploring three main approaches to address this challenge:
 - **Description**: This approach involves using only the labeled training data with a U-Net architecture. Considering the limited training data, we concatenate the first 11 frames along the channel dimension to get a 33x240x160 tensor as input.
 - **Rationale**: U-Net is known for its effectiveness in semantic segmentation, especially when dealing with limited data.
 
-Certainly! Here's a revised version of your notes, incorporating the suggested approach:
-
----
-
 ### 2. Dual-Phase Training Integrating Self-supervised and Supervised Learning
 
 - **Brief Description**: The strategy involves two distinct phases. In the first phase, the goal is to predict the 22nd frame from the initial 11 frames using both unlabeled and labeled datasets. In the second phase, the focus shifts to predicting the segmentation mask of the 22nd frame, building upon the work of the first phase.
