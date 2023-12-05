@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from Reconstructor import Encoder, VideoFrameReconstructor
+from Reconstructor_mini import VideoFrameReconstructor_Mini
 
 # Your DoubleConv, Down, Up, OutConv, and Encoder classes go here
 
@@ -33,12 +33,27 @@ num_layers = 2  # Number of layers in ConvLSTM
 hidden_size = 256  # Hidden size of ConvLSTM
 C, H, W = 3, 240, 160  # Input size
 batch_size = 2  # Batch size
-print(f'Input size: [{batch_size}, {num_frames}, {C}, {H}, {W}]')
+# print(f'Input size: [{batch_size}, {num_frames}, {C}, {H}, {W}]')
 
-model = VideoFrameReconstructor(C, H, W, num_frames, hidden_size, num_layers)
+# model = VideoFrameReconstructor(C, H, W, num_frames, hidden_size, num_layers)
+
+# # Create a test input tensor with shape [B, T, C, H, W]
+# x = torch.rand(batch_size, num_frames, C, H, W)  # Batch size is 2
+
+# # Pass the test input through the model
+# output = model(x)
+
+# # Print the size of the output
+# print(f"Output size: {output.size()}")
+
+# -----------------Test final_hidden of VideoFrameReconstructor_mini-----------------
+print("-----------------Test final_hidden of VideoFrameReconstructor_mini-----------------")
+model = VideoFrameReconstructor_Mini(C, num_frames, hidden_size, num_layers)
 
 # Create a test input tensor with shape [B, T, C, H, W]
 x = torch.rand(batch_size, num_frames, C, H, W)  # Batch size is 2
-
-# Pass the test input through the model
+print(f'Input size: [{batch_size}, {num_frames}, {C}, {H}, {W}]')
 output = model(x)
+
+# Print the size of the output
+print(f"Output size: {output.size()}")

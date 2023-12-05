@@ -4,9 +4,9 @@ import torch.nn.functional as F
 from .convLSTM import ConvLSTMCell, ConvLSTM
 
 # Define the full model that combines the encoder, ConvLSTM-based reconstructor, and decoder
-class VideoFrameReconstructor(nn.Module):
-    def __init__(self, C, num_frames, LSTM_hidden_size, num_layers, encoder_final_channel = 1024):
-        super(VideoFrameReconstructor, self).__init__()
+class VideoFrameReconstructor_Mini(nn.Module):
+    def __init__(self, C, num_frames, LSTM_hidden_size, num_layers, encoder_final_channel = 512):
+        super(VideoFrameReconstructor_Mini, self).__init__()
         self.num_frames = num_frames
         self.hidden_size = LSTM_hidden_size
         self.num_layers = num_layers
@@ -45,18 +45,17 @@ class Encoder(nn.Module):
         self.inc = (DoubleConv(input_channels, 64))
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
-        self.down3 = (Down(256, 512))
         factor = 2 if bilinear else 1
-        self.down4 = (Down(512, final_channel // factor))
+        self.down3 = (Down(256, final_channel // factor))
+
 
     def forward(self, x):
         x1 = self.inc(x)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
-        x5 = self.down4(x4)
 
-        return x5
+        return x4
 
 
 # Define the decoder structure
@@ -68,14 +67,12 @@ class Decoder(nn.Module):
         self.up1 = Up(input_channels, 128 // factor, bilinear)
         self.up2 = Up(128 // factor, 64, bilinear)
         self.up3 = Up(64 // factor, 32, bilinear)
-        self.up4 = Up(32 // factor, 16, bilinear)
-        self.outc = OutConv(16, final_channel)
+        self.outc = OutConv(32, final_channel)
 
     def forward(self, x):
         x = self.up1(x)
         x = self.up2(x)
         x = self.up3(x)
-        x = self.up4(x)
         logits = self.outc(x)
         return logits
 

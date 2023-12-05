@@ -14,24 +14,22 @@ class SSL_Reconstruction_Dataset(Dataset):
         root_dir (string): Directory with all the video folders.
         transform (callable, optional): Optional transform to be applied on a sample.
     """
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, subset, transform=None):
         self.root_dir = root_dir
         self.transform = transform
+        assert subset in ['unlabeled', 'train'], 'subset must be either train or unlabeled'
+        self.subset = subset
 
         # Accumulate all video folder paths from both train and unlabeled directories
-        self.video_folders = []
-        for subset in ['train', 'unlabeled']:
-            subset_dir = os.path.join(root_dir, subset)
-            self.video_folders.extend([
-                os.path.join(subset_dir, f) for f in sorted(os.listdir(subset_dir))
-                if os.path.isdir(os.path.join(subset_dir, f))
-            ])
+        subset_dir = os.path.join(root_dir, subset)
+        self.video_folders = [f for f in sorted(os.listdir(subset_dir)) if os.path.isdir(os.path.join(subset_dir, f))]
 
     def __len__(self):
         return len(self.video_folders)
 
     def __getitem__(self, idx):
-        video_path = self.video_folders[idx]
+        video_folder = self.video_folders[idx]
+        video_path = os.path.join(self.root_dir, self.subset, video_folder)
         
         # Load the first 11 frames
         frames = [Image.open(os.path.join(video_path, f'image_{i}.png')).convert('RGB') for i in range(11)]
@@ -96,9 +94,10 @@ class Labeled_Segementation_Dataset(Dataset):
 
         return frames, mask       
 
-def test(transform=None):
+def test(subset, transform=None):
     # Test the dataset class by loading the first sample
-    dataset = SSL_Reconstruction_Dataset(root_dir, transform=transform)
+    dataset = SSL_Reconstruction_Dataset(root_dir, subset, transform=transform)
+    print('Dataset length: ', len(dataset))
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=2, shuffle=True)
 
     for i_batch, sample_batched in enumerate(dataloader):
@@ -116,8 +115,8 @@ if __name__ == '__main__':
 
     train_transform = SegmentationTrainingTransform()
     print('------test 1------')
-    test()
+    test('train', train_transform)
     print('------test 2------')
-    test(train_transform)
+    test('unlabeled', train_transform)
     
     
