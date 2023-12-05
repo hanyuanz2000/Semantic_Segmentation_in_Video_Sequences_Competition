@@ -26,7 +26,7 @@ We are exploring three main approaches to address this challenge:
 1. **Self-Supervised Learning Phase:**
    - **Task:** Predict the 22nd frame using the first 11 frames from both unlabeled and labeled training videos.
    - **Simplified Encoder:** A streamlined encoder is employed to process each of the first 11 frames, focusing on efficient feature extraction.
-   - **Temporal Dynamics Analysis:** The GRU (Gated Recurrent Unit) layer is used to analyze temporal evolution across frames, integrating the extracted features into a coherent temporal sequence.
+   - **Temporal Dynamics Analysis:** The ConvLSTM layer is used to analyze temporal evolution across frames, integrating the extracted features into a coherent temporal sequence.
    - **Reconstruction Output:** The output from the GRU layer is then utilized to reconstruct the appearance of the 22nd frame. The output is formatted as (batch size, channels, height, width).
    - **Efficiency Focus:** This phase emphasizes computational efficiency and effective temporal feature capture without the complexity of U-Net.
 
