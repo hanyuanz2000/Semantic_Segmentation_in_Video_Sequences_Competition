@@ -28,11 +28,10 @@ print("-----------------Test final_hidden of VideoFrameReconstructor------------
 
 # Initialize the VideoFrameReconstructor
 # The parameters should be adjusted according to your model's requirements
-num_frames = 3  # Number of frames in the sequence
-hidden_size = 128  # Size of the hidden layer in ConvLSTM
+num_frames = 11  # Number of frames in the sequence
 num_layers = 2  # Number of layers in ConvLSTM
-C = 3  # Number of channels in the input
-H, W = 240, 160  # Height and Width of the input frames
+hidden_size = 512  # Hidden size of ConvLSTM
+C, H, W = 3, 240, 160  # Input size
 batch_size = 2  # Batch size
 print(f'Input size: [{batch_size}, {num_frames}, {C}, {H}, {W}]')
 

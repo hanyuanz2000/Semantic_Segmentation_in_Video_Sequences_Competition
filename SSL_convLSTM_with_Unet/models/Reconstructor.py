@@ -12,9 +12,9 @@ class VideoFrameReconstructor(nn.Module):
         self.num_layers = num_layers
 
         # Encoder and Decoder should have appropriate parameters passed
-        self.encoder = Encoder(C, hidden_size)  # Assuming C is the number of channels
-        self.reconstructor = ConvLSTM(C, hidden_size, kernel_size=(3,3), num_layers=num_layers, batch_first=True)
-        # self.decoder = Decoder(hidden_size, C)  # Assuming the output has the same channels as input
+        self.encoder = Encoder(C)
+        self.reconstructor = ConvLSTM(input_dim=1024, hidden_dim=hidden_size, kernel_size=(3, 3), num_layers=num_layers, batch_first=True, bias=True, return_all_layers=False)
+        self.decoder = Decoder(C)
 
     def forward(self, x):
         batch_size, _, _, H, W = x.size()  # x is expected to be of shape [B, T, C, H, W]
@@ -22,11 +22,13 @@ class VideoFrameReconstructor(nn.Module):
         # Encode each frame
         encoded_frames = [self.encoder(x[:, t, :, :, :]) for t in range(self.num_frames)]
 
-        # check the size of encoded_frames
-        print("Dimension of encoded_frames:", encoded_frames[0].shape)
+        print("Dimension of each encoded frame:", encoded_frames[0].shape)
+        print('num_frames:', self.num_frames)
 
         # Stack encoded frames and pass through ConvLSTM
         encoded_sequence = torch.stack(encoded_frames, dim=1)  # Shape [B, T, C, H', W']
+        # check the size of encoded_frames
+        print("Dimension of encoded sequence:", encoded_sequence.shape)
         _, last_states = self.reconstructor(encoded_sequence)
 
         # Use the final hidden state to predict the next frame
@@ -34,20 +36,20 @@ class VideoFrameReconstructor(nn.Module):
 
         # check the size of final_hidden
         print("Dimension of final_hidden:", final_hidden.shape)
-
-        return final_hidden
         
-        # next_frame_prediction = self.decoder(final_hidden)
+        next_frame_prediction = self.decoder(final_hidden)
 
-        # return next_frame_prediction
+        # check the size of next_frame_prediction
+        print("Dimension of next_frame_prediction:", next_frame_prediction.shape)
+
+        return next_frame_prediction
     
 
 # Define the encoder structure
 class Encoder(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=False):
+    def __init__(self, n_channels, bilinear=False):
         super(Encoder, self).__init__()
         self.n_channels = n_channels
-        self.n_classes = n_classes
         self.bilinear = bilinear
 
         self.inc = (DoubleConv(n_channels, 64))
@@ -64,32 +66,26 @@ class Encoder(nn.Module):
         x4 = self.down3(x3)
         x5 = self.down4(x4)
 
-        # check the size of encoded_frames
-        print("Dimension of each encoded frame:", x5.shape)
-
         return x5
 
 
 # Define the decoder structure
 class Decoder(nn.Module):
-    def __init__(self, n_classes, size_rerorder, bilinear=False):
+    def __init__(self, C, initial_channels=512, bilinear=False):
         super(Decoder, self).__init__()
+        # Adjust the initial_channels to match the output channels of ConvLSTM
         factor = 2 if bilinear else 1
-        self.up1 = (Up(1024, 512 // factor, bilinear))
-        self.up2 = (Up(512, 256 // factor, bilinear))
-        self.up3 = (Up(256, 128 // factor, bilinear))
-        self.up4 = (Up(128, 64, bilinear))
-        self.outc = (OutConv(64, n_classes))
-        self.x1_size = size_rerorder[0]
-        self.x2_size = size_rerorder[1]
-        self.x3_size = size_rerorder[2]
-        self.x4_size = size_rerorder[3]
+        self.up1 = Up(initial_channels, 512 // factor, bilinear)
+        self.up2 = Up(512 // factor, 256 // factor, bilinear)
+        self.up3 = Up(256 // factor, 128 // factor, bilinear)
+        self.up4 = Up(128 // factor, 64, bilinear)
+        self.outc = OutConv(64, C)  # Adjust to the number of output channels (e.g., 3 for RGB images)
 
     def forward(self, x):
-        x = self.up1(x, self.x4_size)
-        x = self.up2(x, self.x3_size)
-        x = self.up3(x, self.x2_size)
-        x = self.up4(x, self.x1_size)
+        x = self.up1(x)
+        x = self.up2(x)
+        x = self.up3(x)
+        x = self.up4(x)
         logits = self.outc(x)
         return logits
 
@@ -129,7 +125,7 @@ class Down(nn.Module):
 
 
 class Up(nn.Module):
-    """Upscaling then double conv"""
+    """Upscaling then double conv without skip connections"""
 
     def __init__(self, in_channels, out_channels, bilinear=True):
         super().__init__()
@@ -137,21 +133,16 @@ class Up(nn.Module):
         # if bilinear, use the normal convolutions to reduce the number of channels
         if bilinear:
             self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+            # Adjust the DoubleConv to only consider in_channels
             self.conv = DoubleConv(in_channels, out_channels)
+        else:
+            self.up = nn.ConvTranspose2d(in_channels , in_channels // 2, kernel_size=2, stride=2)
+            self.conv = DoubleConv(in_channels // 2, out_channels)
 
-    def forward(self, x1, x2_size):
-        x1 = self.up(x1)
-        # input is CHW
-        diffY = x2_size[2] - x1.size()[2]
-        diffX = x2_size[3] - x1.size()[3]
-
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
-        
-        return self.conv(x1)
+    def forward(self, x):
+        x = self.up(x)
+        x = self.conv(x)
+        return x
 
 
 class OutConv(nn.Module):
