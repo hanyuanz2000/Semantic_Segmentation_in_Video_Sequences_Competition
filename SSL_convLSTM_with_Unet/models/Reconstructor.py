@@ -5,16 +5,16 @@ from convLSTM import ConvLSTMCell, ConvLSTM
 
 # Define the full model that combines the encoder, ConvLSTM-based reconstructor, and decoder
 class VideoFrameReconstructor(nn.Module):
-    def __init__(self, num_frames, hidden_size, num_layers, C, H, W):
+    def __init__(self, C, H, W, num_frames, LSTM_hidden_size, num_layers, encoder_final_channel = 1024):
         super(VideoFrameReconstructor, self).__init__()
         self.num_frames = num_frames
-        self.hidden_size = hidden_size
+        self.hidden_size = LSTM_hidden_size
         self.num_layers = num_layers
 
         # Encoder and Decoder should have appropriate parameters passed
-        self.encoder = Encoder(C)
-        self.reconstructor = ConvLSTM(input_dim=1024, hidden_dim=hidden_size, kernel_size=(3, 3), num_layers=num_layers, batch_first=True, bias=True, return_all_layers=False)
-        self.decoder = Decoder(C)
+        self.encoder = Encoder(input_channels=C, final_channel=encoder_final_channel)
+        self.reconstructor = ConvLSTM(input_dim=encoder_final_channel, hidden_dim=LSTM_hidden_size, kernel_size=(3, 3), num_layers=num_layers, batch_first=True, bias=True, return_all_layers=False)
+        self.decoder = Decoder(input_channels=LSTM_hidden_size, final_channel=C)
 
     def forward(self, x):
         batch_size, _, _, H, W = x.size()  # x is expected to be of shape [B, T, C, H, W]
@@ -22,42 +22,32 @@ class VideoFrameReconstructor(nn.Module):
         # Encode each frame
         encoded_frames = [self.encoder(x[:, t, :, :, :]) for t in range(self.num_frames)]
 
-        print("Dimension of each encoded frame:", encoded_frames[0].shape)
-        print('num_frames:', self.num_frames)
-
         # Stack encoded frames and pass through ConvLSTM
         encoded_sequence = torch.stack(encoded_frames, dim=1)  # Shape [B, T, C, H', W']
-        # check the size of encoded_frames
-        print("Dimension of encoded sequence:", encoded_sequence.shape)
+
         _, last_states = self.reconstructor(encoded_sequence)
 
         # Use the final hidden state to predict the next frame
         final_hidden = last_states[-1][0]  # Assuming return_all_layers=False
-
-        # check the size of final_hidden
-        print("Dimension of final_hidden:", final_hidden.shape)
         
         next_frame_prediction = self.decoder(final_hidden)
-
-        # check the size of next_frame_prediction
-        print("Dimension of next_frame_prediction:", next_frame_prediction.shape)
 
         return next_frame_prediction
     
 
 # Define the encoder structure
 class Encoder(nn.Module):
-    def __init__(self, n_channels, bilinear=False):
+    def __init__(self, input_channels, final_channel = 1024, bilinear=False):
         super(Encoder, self).__init__()
-        self.n_channels = n_channels
+        self.input_channels = input_channels
         self.bilinear = bilinear
 
-        self.inc = (DoubleConv(n_channels, 64))
+        self.inc = (DoubleConv(input_channels, 64))
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
         self.down3 = (Down(256, 512))
         factor = 2 if bilinear else 1
-        self.down4 = (Down(512, 1024 // factor))
+        self.down4 = (Down(512, final_channel // factor))
 
     def forward(self, x):
         x1 = self.inc(x)
@@ -71,15 +61,15 @@ class Encoder(nn.Module):
 
 # Define the decoder structure
 class Decoder(nn.Module):
-    def __init__(self, C, initial_channels=512, bilinear=False):
+    def __init__(self, input_channels = 256, final_channel = 3, bilinear=False):
         super(Decoder, self).__init__()
         # Adjust the initial_channels to match the output channels of ConvLSTM
         factor = 2 if bilinear else 1
-        self.up1 = Up(initial_channels, 512 // factor, bilinear)
-        self.up2 = Up(512 // factor, 256 // factor, bilinear)
-        self.up3 = Up(256 // factor, 128 // factor, bilinear)
-        self.up4 = Up(128 // factor, 64, bilinear)
-        self.outc = OutConv(64, C)  # Adjust to the number of output channels (e.g., 3 for RGB images)
+        self.up1 = Up(input_channels, 128 // factor, bilinear)
+        self.up2 = Up(128 // factor, 64, bilinear)
+        self.up3 = Up(64 // factor, 32, bilinear)
+        self.up4 = Up(32 // factor, 16, bilinear)
+        self.outc = OutConv(16, final_channel)
 
     def forward(self, x):
         x = self.up1(x)
@@ -116,7 +106,7 @@ class Down(nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(2)
             DoubleConv(in_channels, out_channels)
         )
 
