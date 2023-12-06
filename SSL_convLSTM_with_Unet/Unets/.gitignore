@@ -1,6 +1,0 @@
-Data/
-*.png
-*.npy
-__pycache__/
-logs/
-wandb/

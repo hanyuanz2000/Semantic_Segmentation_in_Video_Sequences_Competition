@@ -19,7 +19,6 @@ from models.Reconstructor_mini import VideoFrameReconstructor_Mini
 from models.Reconstructor import VideoFrameReconstructor
 from utils import data_loading
 from utils import customized_transform
-from basic_config import root_dir
 from utils.dice_score import dice_loss
 from evaluate_reconstructor import evaluate
 from datetime import datetime
@@ -39,8 +38,8 @@ def get_args():
     parser.add_argument('--amp', type=bool, default=False, help='Enable Automatic Mixed Precision (AMP)')
     parser.add_argument('--model_name', type=str, default='Reconstructor Mini', help='Choose the model to train')
     parser.add_argument('--optimizer', type=str, default='RMSprop', help='Choose the optimizer')
+    parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
     
-
     return parser.parse_args()
 
 # Function to train the model
@@ -57,7 +56,8 @@ def train_model(
         gradient_clipping,
         amp,
         model_name,
-        optimizer_choice
+        optimizer_choice,
+        root_dir
     ):
 
     # set project name and initialize experiment 
@@ -268,7 +268,8 @@ if __name__ == '__main__':
         gradient_clipping=args.gradient_clipping,
         amp=args.amp,
         model_name=args.model_name,
-        optimizer_choice=args.optimizer
+        optimizer_choice=args.optimizer,
+        root_dir=args.root_dir  
     )
 
 
