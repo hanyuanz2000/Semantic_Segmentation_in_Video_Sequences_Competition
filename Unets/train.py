@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import wandb
 from pathlib import Path
@@ -20,6 +20,7 @@ from basic_config import root_dir
 from utils.dice_score import dice_loss
 from evaluate import evaluate
 from datetime import datetime
+import numpy as np
 
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 # export PYTORCH_ENABLE_MPS_FALLBACK=1
@@ -36,7 +37,7 @@ def get_args():
     parser.add_argument('--gradient_clipping', type=float, default=1.0, help='Gradient clipping')
     parser.add_argument('--amp', type=bool, default=False, help='Enable Automatic Mixed Precision (AMP)')
     parser.add_argument('--model_name', type=str, default='Unet_Direct_Pred', help='Name of the model')
-
+    parser.add_argument('--subset_test', type=bool, default=False, help='Whether to use a subset of the data for testing')
 
     return parser.parse_args()
 
@@ -53,7 +54,8 @@ def train_model(
         momentum,
         gradient_clipping,
         amp,
-        model_name
+        model_name,
+        subset_test
     ):
 
     # set project name and initialize experiment 
@@ -83,12 +85,29 @@ def train_model(
     # load data
     train_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
     val_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
+
     n_train, n_val = len(train_set), len(val_set)
 
-    # Initialize data loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+    if subset_test: # Only use a subset of the data for testing
+        # Define the size of the subset as 5% of the dataset
+        train_subset_size = int(0.05 * n_train)
+        val_subset_size = int(0.05 * n_val)
 
+        # Generate random indices for train and validation subsets
+        train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
+        val_subset_indices = np.random.choice(range(n_val), val_subset_size, replace=False)
+
+        # Create subsets
+        train_subset = Subset(train_set, train_subset_indices)
+        val_subset = Subset(val_set, val_subset_indices)
+    
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+
+    else: # Load the entire dataset
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+    
     logging.info(f'Initializing training on {len(train_set)} training images and {len(val_set)} validation images')
     logging.info(f'Using device {device}')
     logging.info(f'Image size: {train_set[0][0][0].size()}')
@@ -116,12 +135,14 @@ def train_model(
             for batch in train_loader:
                 frames, true_masks = batch
                 bs, seq_len, C, H, W = frames.shape
+                
                 # conver to (bs, seq_len * C, H, W)
                 frames = frames.contiguous()
                 frames= frames.view(bs, seq_len*C, H, W)
                 frames = frames.to(device, dtype=torch.float32)
-                if true_masks.ndim > 3:  # This means masks are one-hot encoded
-                    true_masks = torch.argmax(true_masks, dim=1)
+                
+                # reshape true_masks from (bs, 1, H, W) to (bs, H, W)
+                true_masks = true_masks.squeeze(1)
                 true_masks = true_masks.to(device,  dtype=torch.long)
 
                 masks_pred = model(frames)
@@ -189,7 +210,6 @@ def train_model(
         print(f'Best model saved at {best_model_path}')
     experiment.finish()
 
-
 # Main script execution
 if __name__ == '__main__':
     args = get_args()
@@ -215,7 +235,7 @@ if __name__ == '__main__':
 
     # Dimension of the input to the model
     input_channel = 33  # 3 RGB channels per frame, 11 frames
-    output_channel = 22  # 22 classes for segmentation
+    output_channel = 49  # 22 classes for segmentation
 
     # Initialize the UNet model
     model = UNet(input_channel, output_channel)
@@ -235,7 +255,8 @@ if __name__ == '__main__':
         momentum=args.momentum,
         gradient_clipping=args.gradient_clipping,
         amp=args.amp,
-        model_name=args.model_name
+        model_name=args.model_name,
+        subset_test=args.subset_test
     )
 
 

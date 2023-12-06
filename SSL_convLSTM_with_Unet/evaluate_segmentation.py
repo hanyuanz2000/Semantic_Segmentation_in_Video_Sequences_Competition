@@ -19,10 +19,9 @@ def evaluate(net, reconstructor, dataloader, device, amp):
             frames, true_masks = batch
 
             frames = frames.to(device, dtype=torch.float32)
+            
+            true_masks = true_masks.squeeze(1)
             true_masks = true_masks.to(device, dtype=torch.long)
-
-            if true_masks.ndim > 3:  # This means masks are one-hot encoded
-                true_masks = torch.argmax(true_masks, dim=1)
 
             # Reconstruct the frames using the reconstructor
             with torch.no_grad():

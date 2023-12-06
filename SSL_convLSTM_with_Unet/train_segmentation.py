@@ -5,12 +5,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import wandb
 from pathlib import Path
 import os
 import torchmetrics
+import numpy as np
 
 # Your custom modules
 from models.unet_model import UNet
@@ -40,6 +41,7 @@ def get_args():
     parser.add_argument('--model_name', type=str, default='Unet_Pred_on_SSL_Predited_Frame', help='Name of the model')
     parser.add_argument('--path_to_reconstructor_weights', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/Reconstructor Mini_Dec05-10:00_Opti_RMSprop_LR_0.001_BS_4_WD_1e-06_Mom_0.9_GradClip_1.0/best_model_epoch_1.pth', help='Path to the weights of the reconstructor')
     parser.add_argument('--reconstructor_name', type=str, default='VideoFrameReconstructor_Mini', help='Name of the reconstructor')
+    parser.add_argument('--subset_test', type=bool, default=False, help='Whether to use a subset of the data for testing')
 
     return parser.parse_args()
 
@@ -59,6 +61,7 @@ def train_model(
         model_name,
         reconstructor_name,
         reconstructor,
+        subset_test
     ):
 
     # set project name and initialize experiment 
@@ -90,14 +93,25 @@ def train_model(
     val_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
     n_train, n_val = len(train_set), len(val_set)
 
-    train_subset_size = int(0.1 * len(train_set))  # Adjust the proportion as needed
-    train_subset, _ = random_split(train_set, [train_subset_size, len(train_set) - train_subset_size])
-    val_subset_size = int(0.1 * len(val_set))  # Adjust the proportion as needed
-    val_subset, _ = random_split(val_set, [val_subset_size, len(val_set) - val_subset_size])
+    if subset_test: # Only use a subset of the data for testing
+        # Define the size of the subset as 5% of the dataset
+        train_subset_size = int(0.05 * n_train)
+        val_subset_size = int(0.05 * n_val)
+
+        # Generate random indices for train and validation subsets
+        train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
+        val_subset_indices = np.random.choice(range(n_val), val_subset_size, replace=False)
+
+        # Create subsets
+        train_subset = Subset(train_set, train_subset_indices)
+        val_subset = Subset(val_set, val_subset_indices)
     
-    # Initialize data loaders
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+    
+    else: # Use the entire dataset
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
 
     logging.info(f'Initializing training on {len(train_set)} training images and {len(val_set)} validation images')
     logging.info(f'Using device {device}')
@@ -128,8 +142,9 @@ def train_model(
             for batch in train_loader:
                 frame, true_masks = batch
                 frame = frame.to(device, dtype=torch.float32)
-                if true_masks.ndim > 3:  # This means masks are one-hot encoded
-                    true_masks = torch.argmax(true_masks, dim=1)
+                
+                # reshape true_masks from (bs, 1, H, W) to (bs, H, W)
+                true_masks = true_masks.squeeze(1)
                 true_masks = true_masks.to(device, dtype=torch.long)
 
                 # Predict the 22nd frame using the reconstructor
@@ -137,7 +152,6 @@ def train_model(
                     predicted_frames = reconstructor(frame)
                     predicted_frames.to(device, dtype=torch.float32)
             
-
                 # Predict the segmentation masks using U-Net
                 masks_pred = model(predicted_frames)
 
@@ -230,7 +244,7 @@ if __name__ == '__main__':
 
     # Dimension of the input to the model
     input_channel = 3  # 3 RGB channels per frame, 11 frames
-    output_channel = 22  # 22 classes for segmentation
+    output_channel = 49
 
     # Initialize the UNet model
     model = UNet(input_channel, output_channel)
@@ -261,6 +275,7 @@ if __name__ == '__main__':
         model_name=args.model_name,
         reconstructor_name = args.reconstructor_name,
         reconstructor = reconstructor,
+        subset_test = args.subset_test
     )
 
 

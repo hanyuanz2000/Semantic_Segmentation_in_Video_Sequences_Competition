@@ -17,14 +17,15 @@ def evaluate(net, dataloader, device, amp):
     with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
         for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
             image, mask_true = batch
-            # conver to (bs, seq_len * C, H, W)
             bs, seq_len, C, H, W = image.shape
+
+            # conver to (bs, seq_len * C, H, W)
             image = image.contiguous()
             image= image.view(bs, seq_len*C, H, W)
             image = image.to(device, dtype=torch.float32, memory_format=torch.channels_last)
+            
             # move images and labels to correct device and type
-            if mask_true.ndim > 3:  # This means masks are one-hot encoded
-                mask_true = torch.argmax(mask_true, dim=1)
+            mask_true = mask_true.squeeze(1)
             mask_true = mask_true.to(device=device, dtype=torch.long)
 
             # predict the mask

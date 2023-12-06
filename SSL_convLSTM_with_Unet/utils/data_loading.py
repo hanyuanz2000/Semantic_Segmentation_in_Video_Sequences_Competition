@@ -81,7 +81,7 @@ class Labeled_Segementation_Dataset(Dataset):
         # Load the first 11 frames
         frames = [Image.open(os.path.join(video_path, f'image_{i}.png')).convert('RGB') for i in range(11)]
         # Load mask
-        mask = np.load(os.path.join(video_path, 'mask.npy'))
+        mask = np.load(os.path.join(video_path, 'mask.npy'))[-1][np.newaxis, :, :]
         mask = torch.from_numpy(mask)
 
         if self.transform:
@@ -92,7 +92,7 @@ class Labeled_Segementation_Dataset(Dataset):
             frames = torch.stack([transforms.ToTensor()(frame) for frame in frames])
             mask = mask.float()
 
-        return frames, mask       
+        return frames, mask     
 
 def test(subset, transform=None):
     # Test the dataset class by loading the first sample

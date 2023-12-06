@@ -31,7 +31,7 @@ class Labeled_Segementation_Dataset(Dataset):
         # Load the first 11 frames
         frames = [Image.open(os.path.join(video_path, f'image_{i}.png')).convert('RGB') for i in range(11)]
         # Load mask
-        mask = np.load(os.path.join(video_path, 'mask.npy'))
+        mask = np.load(os.path.join(video_path, 'mask.npy'))[-1][np.newaxis, :, :]
         mask = torch.from_numpy(mask)
 
         if self.transform:
@@ -47,15 +47,14 @@ class Labeled_Segementation_Dataset(Dataset):
 def test(subset, transform=None):
     print(f'\n------Testing load and transform for {subset} subset------')
     dataset = Labeled_Segementation_Dataset(root_dir, subset=subset, transform=transform)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=4, shuffle=True, num_workers=4)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
 
     for i_batch, sample_batched in enumerate(dataloader):
         frames, mask = sample_batched
-        print(f'Batch {i_batch + 1}:')
+        print(f'  Batch {i_batch + 1}:')
         print(f'  Frames size: {frames.size()}') # (batch_size, seq_len, C, H, W)
         print(f'  Mask size: {mask.size()}')
-
-        # Test only the first batch
+        
         if i_batch == 0:
             break
 
@@ -68,5 +67,5 @@ if __name__ == '__main__':
 
     test('train', transform=SegmentationTrainingTransform())
     test('train')
-    # test('val', transform=SegmentationValidationTransform())
-    # test('unlabeled')
+    test('val')
+
