@@ -12,7 +12,7 @@ from pathlib import Path
 import os
 import torchmetrics
 from torchmetrics.image import StructuralSimilarityIndexMeasure
-from torchmetrics.image import PeakSignalNoiseRatio
+from torchmetrics.image import PeakSignalNoiseRatio 
 import numpy as np
 
 # Your custom modules
@@ -96,7 +96,7 @@ def train_model(
     # load data
     # for this SSL, we use unlabeled data for training and labeled data for validation, so that in the second phase, model can't cheat by using labeled data
     train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
-    val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=val_transform)
+    val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
     n_train, n_val = len(train_set), len(val_set)
 
     if subset_test: # Only use a subset of the data for testing
