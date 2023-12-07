@@ -91,8 +91,8 @@ def train_model(
 
     if subset_test: # Only use a subset of the data for testing
         # Define the size of the subset as 5% of the dataset
-        train_subset_size = int(0.05 * n_train)
-        val_subset_size = int(0.05 * n_val)
+        train_subset_size = int(0.2 * n_train)
+        val_subset_size = int(0.2 * n_val)
 
         # Generate random indices for train and validation subsets
         train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
@@ -148,10 +148,19 @@ def train_model(
 
                 masks_pred = model(frames)
 
+                print('-----------------')
+                print(masks_pred.shape)
+                print(masks_pred)
+
                 loss = criterion(masks_pred, true_masks)
 
                 # Apply softmax to masks_pred to get probabilities
                 masks_pred_softmax = F.softmax(masks_pred, dim=1)
+
+                print('-----------------')
+                print(masks_pred_softmax.shape)
+                print(masks_pred_softmax)
+                
                 # Convert true_masks to one-hot encoding
                 true_masks_one_hot = F.one_hot(true_masks, num_classes=model.n_classes)
                 true_masks_one_hot = true_masks_one_hot.permute(0, 3, 1, 2)  # Change shape to [batch_size, n_classes, H, W]
@@ -162,6 +171,7 @@ def train_model(
 
                 # Calculate Jaccard Index
                 mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
+
                 jac_score = jaccard(mask_pred_argmax, true_masks).item()
                 epoch_jaccard += jac_score
 
@@ -178,13 +188,13 @@ def train_model(
             
 
         # Validation part after each epoch
-        val_jaccard = evaluate(model, val_loader, device, amp)
+        val_jaccard, val_loss = evaluate(model, val_loader, device, amp)
         scheduler.step(val_jaccard)
 
         # Log metrics to Weights & Biases
         average_jaccard = epoch_jaccard / len(train_loader)
-        experiment.log({"Epoch": epoch, "Train Loss": epoch_loss / len(train_loader), "Train Jaccard": average_jaccard, "Val Jaccard": val_jaccard})
-        logging.info(f'Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss / len(train_loader)}, Train Jaccard: {average_jaccard}, Val Jaccard: {val_jaccard}')
+        experiment.log({"Epoch": epoch, "Train Loss": epoch_loss / len(train_loader), "Train Jaccard": average_jaccard, "Val Loss": val_loss, "Cal Jaccard": val_jaccard})
+        logging.info(f'Epoch {epoch + 1}/{epochs}, Train Loss: {epoch_loss / len(train_loader)}, Train Jaccard: {average_jaccard}, Val Loss: {val_loss}, Val Jaccard: {val_jaccard}')
         
         if val_jaccard> best_jac:
             epochs_no_improve = 0 # Reset patience
