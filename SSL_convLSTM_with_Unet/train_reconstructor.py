@@ -16,7 +16,7 @@ from torchmetrics.image import PeakSignalNoiseRatio
 import numpy as np
 
 # Your custom modules
-from models.Reconstructor_Mini import VideoFrameReconstructor_Mini
+from models.ReconstructorMini import VideoFrameReconstructor_Mini
 from models.Reconstructor import VideoFrameReconstructor
 from models.Reconstructor_LessDownSample import VideoFrameReconstructor_LessDownSample
 from utils import data_loading

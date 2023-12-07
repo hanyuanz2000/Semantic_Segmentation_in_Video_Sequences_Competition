@@ -7,3 +7,5 @@
 **/wandb/
 **/*.pt
 **/*.npy
+**/*.pdf
+/Readings
