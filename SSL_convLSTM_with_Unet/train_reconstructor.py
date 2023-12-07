@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import wandb
 from pathlib import Path
@@ -13,10 +13,12 @@ import os
 import torchmetrics
 from torchmetrics.image import StructuralSimilarityIndexMeasure
 from torchmetrics.image import PeakSignalNoiseRatio
+import numpy as np
 
 # Your custom modules
-from models.Reconstructor_mini import VideoFrameReconstructor_Mini
+from models.Reconstructor_Mini import VideoFrameReconstructor_Mini
 from models.Reconstructor import VideoFrameReconstructor
+from models.Reconstructor_LessDownSample import VideoFrameReconstructor_LessDownSample
 from utils import data_loading
 from utils import customized_transform
 from utils.dice_score import dice_loss
@@ -38,7 +40,10 @@ def get_args():
     parser.add_argument('--amp', type=bool, default=False, help='Enable Automatic Mixed Precision (AMP)')
     parser.add_argument('--model_name', type=str, default='Reconstructor Mini', help='Choose the model to train')
     parser.add_argument('--optimizer', type=str, default='RMSprop', help='Choose the optimizer')
+    parser.add_argument('--subset_test', type=bool, default=False, help='Whether to use a subset of the data for testing'),
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
+    parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
+    parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
     
     return parser.parse_args()
 
@@ -57,7 +62,10 @@ def train_model(
         amp,
         model_name,
         optimizer_choice,
-        root_dir
+        subset_test,
+        root_dir,
+        lstm_hidden_size,
+        num_layers
     ):
 
     # set project name and initialize experiment 
@@ -65,7 +73,7 @@ def train_model(
     
     now = datetime.now()
     dt_string = 'Dec' + now.strftime("%d") + '-' + now.strftime("%H:%M")
-    config_string = f'Opti_{optimizer_choice}_LR_{learning_rate}_BS_{batch_size}_WD_{weight_decay}_Mom_{momentum}_GradClip_{gradient_clipping}'
+    config_string = f'lstmhiddensize_{lstm_hidden_size}_nlayers_{num_layers}_Opti_{optimizer_choice}_LR_{learning_rate}_BS_{batch_size}_WD_{weight_decay}_Mom_{momentum}_GradClip_{gradient_clipping}'
     experiment_name = f'{dt_string}_{config_string}'
     logging.info(f'Experiment name: {experiment_name}')
 
@@ -87,13 +95,29 @@ def train_model(
     
     # load data
     # for this SSL, we use unlabeled data for training and labeled data for validation, so that in the second phase, model can't cheat by using labeled data
-    train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='unlabeled', transform=train_transform)
+    train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
     val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=val_transform)
     n_train, n_val = len(train_set), len(val_set)
 
-    # Initialize data loaders
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+    if subset_test: # Only use a subset of the data for testing
+        # Define the size of the subset as 5% of the dataset
+        train_subset_size = int(0.2 * n_train)
+        val_subset_size = int(0.2 * n_val)
+
+        # Generate random indices for train and validation subsets
+        train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
+        val_subset_indices = np.random.choice(range(n_val), val_subset_size, replace=False)
+
+        # Create subsets
+        train_subset = Subset(train_set, train_subset_indices)
+        val_subset = Subset(val_set, val_subset_indices)
+    
+        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
+
+    else: # Load the entire dataset
+        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=os.cpu_count(), pin_memory=True)
+        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=os.cpu_count(), pin_memory=True)
 
     logging.info(f'Initializing training on {len(train_set)} training data and {len(val_set)} validation images')
     logging.info(f'Using device {device}')
@@ -244,12 +268,17 @@ if __name__ == '__main__':
     # choose model
     if args.model_name == 'Reconstructor':
         # Initialize the model
-        model = VideoFrameReconstructor(C=3, num_frames=11, LSTM_hidden_size=256, num_layers=2)
+        model = VideoFrameReconstructor(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
         model.to(device)
         print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters())}')
     elif args.model_name == 'Reconstructor Mini':
         # Initialize the model
-        model = VideoFrameReconstructor_Mini(C=3, num_frames=11, LSTM_hidden_size=256, num_layers=2)
+        model = VideoFrameReconstructor_Mini(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
+        model.to(device)
+        print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters())}')
+    elif args.model_name == 'Reconstructor Less DownSample':
+        # Initialize the model
+        model = VideoFrameReconstructor_LessDownSample(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
         model.to(device)
         print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters())}')
 
@@ -269,7 +298,10 @@ if __name__ == '__main__':
         amp=args.amp,
         model_name=args.model_name,
         optimizer_choice=args.optimizer,
-        root_dir=args.root_dir  
+        subset_test=args.subset_test,
+        root_dir=args.root_dir,
+        lstm_hidden_size=args.LSTM_hidden_size,
+        num_layers=args.num_layers
     )
 
 
