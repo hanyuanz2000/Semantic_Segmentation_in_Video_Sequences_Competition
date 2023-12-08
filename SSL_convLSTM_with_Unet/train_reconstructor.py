@@ -22,8 +22,9 @@ from models.Reconstructor_LessDownSample import VideoFrameReconstructor_LessDown
 from utils import data_loading
 from utils import customized_transform
 from utils.dice_score import dice_loss
-from evaluate_reconstructor import evaluate
+from utils.Gradident_Variance_Loss import GradientVariance
 from datetime import datetime
+
 
 os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 # export PYTORCH_ENABLE_MPS_FALLBACK=1
@@ -32,40 +33,44 @@ os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 def get_args():
     parser = argparse.ArgumentParser(description='Train the Reconstructor model')
     parser.add_argument('--epochs', type=int, default=1, help='Number of epochs')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
+    parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-6, help='Weight decay')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum')
     parser.add_argument('--gradient_clipping', type=float, default=1.0, help='Gradient clipping')
     parser.add_argument('--amp', type=bool, default=False, help='Enable Automatic Mixed Precision (AMP)')
-    parser.add_argument('--model_name', type=str, default='Reconstructor Mini', help='Choose the model to train')
-    parser.add_argument('--optimizer', type=str, default='RMSprop', help='Choose the optimizer')
+    parser.add_argument('--model_name', type=str, default='Reconstructor Less DownSample', help='Choose the model to train')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='Choose the optimizer')
     parser.add_argument('--subset_test', type=bool, default=False, help='Whether to use a subset of the data for testing'),
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
+    parser.add_argument('--dataset', type=str, default='SSL_Reconstruction_Dataset', help='Choose the dataset function to train on') 
+    parser.add_argument('--frame_target', type=bool, default=False, help='Whether to use frame target or mask target (only for VideoFrameDataPt))')
+    parser.add_argument('--first', type=int, default=1, help='first index to load (only for VideoFrameDataPt))')
+    parser.add_argument('--last', type=int, default=100, help='last index to load (only for VideoFrameDataPt))')
     
     return parser.parse_args()
 
 # Function to train the model
 def train_model(
-        model, 
-        device, 
-        train_transform,
-        val_transform,
-        epochs, 
-        batch_size,
-        learning_rate,
-        weight_decay,
-        momentum,
-        gradient_clipping,
-        amp,
-        model_name,
-        optimizer_choice,
-        subset_test,
-        root_dir,
-        lstm_hidden_size,
-        num_layers
+    model,
+    device,
+    train_transform,
+    val_transform,
+    epochs,
+    batch_size,
+    learning_rate,
+    weight_decay,
+    momentum,
+    gradient_clipping,
+    amp,
+    model_name,
+    optimizer_choice,
+    subset_test,
+    root_dir,
+    lstm_hidden_size,
+    num_layers,
     ):
 
     # set project name and initialize experiment 
@@ -101,8 +106,8 @@ def train_model(
 
     if subset_test: # Only use a subset of the data for testing
         # Define the size of the subset as 5% of the dataset
-        train_subset_size = int(0.2 * n_train)
-        val_subset_size = int(0.2 * n_val)
+        train_subset_size = int(0.05 * n_train)
+        val_subset_size = int(0.05 * n_val)
 
         # Generate random indices for train and validation subsets
         train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
@@ -121,7 +126,8 @@ def train_model(
 
     logging.info(f'Initializing training on {len(train_set)} training data and {len(val_set)} validation images')
     logging.info(f'Using device {device}')
-    logging.info(f'Training tensor shape: {train_set[0][0].shape}')
+    # logging.info(f'data shape: {train_set[0][0].shape}')
+    # logging.info(f'target shape: {train_set[0][1].shape}')
 
     # Initialize optimizer, loss function and learning rate scheduler
     # Initialize optimizer based on choice
@@ -130,16 +136,22 @@ def train_model(
     elif optimizer_choice == 'Adam':
         optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=2)
+    
     criterion = nn.MSELoss()
+    grad_criterion = GradientVariance(patch_size=10, device=device)
 
     # Initialize metrics
     psnr = PeakSignalNoiseRatio().to(device)
     ssim = StructuralSimilarityIndexMeasure().to(device)
+
     best_metrics = {
+        'total_loss': float('inf'),
         'mse_loss': float('inf'),
-        'psnr': 0.0,
-        'ssim': 0.0
+        'grad_var_loss': float('inf'), # Gradient variance loss
+        'psnr': 0,
+        'ssim': 0,
     }
+
     best_model_path = None
 
     patience = 10 # Number of epochs to wait before reducing learning rate
@@ -162,13 +174,15 @@ def train_model(
                 predicted_frame = model(frames)
 
                 mse_loss = criterion(predicted_frame, future_frame)
-
+                loss_grad = 0.2 * grad_criterion(predicted_frame, future_frame)
+                loss = mse_loss + loss_grad
+                
                 optimizer.zero_grad()
-                mse_loss.backward()
+                loss.backward()
                 optimizer.step()
 
                 pbar.update(frames.shape[0])
-                epoch_loss += mse_loss.item()
+                epoch_loss += loss.item()
 
                 psnr_score = psnr(predicted_frame, future_frame).item()
                 ssim_score = ssim(predicted_frame, future_frame).item()
@@ -176,19 +190,19 @@ def train_model(
                 epoch_ssim += ssim_score
 
                 experiment.log({
-                    "Train Loss": mse_loss.item(),
+                    "Train Loss": loss.item(),
                     "Train PSNR": psnr_score,
                     "Train SSIM": ssim_score,
                 })
-                pbar.set_postfix(**{'loss (batch)': mse_loss.item()})
+                pbar.set_postfix(**{'loss (batch)': loss.item()})
         
         # Calculate average metrics for the epoch (train)
         average_psnr = epoch_psnr / len(train_loader)
         average_ssim = epoch_ssim / len(train_loader)
 
         # Validation part after each epoch
-        avg_mse_loss, avg_psnr, avg_ssim = evaluate(model, val_loader, device)  # Updated evaluate function call
-        scheduler.step(avg_mse_loss)  # Updated scheduler to use mse_loss
+        avg_total_loss, avg_mse_loss, avg_grad_var_loss, avg_psnr, avg_ssim = evaluate(model, val_loader, device)  # Updated evaluate function call
+        scheduler.step(avg_total_loss)  # Updated scheduler to use mse_loss
 
         # Log metrics to Weights & Biases
         experiment.log({
@@ -196,16 +210,24 @@ def train_model(
             "Train MSE Loss": epoch_loss / len(train_loader),
             "Train PSNR": average_psnr,
             "Train SSIM": average_ssim,
-            "Val MSE Loss": avg_mse_loss,
-            "Val PSNR": avg_psnr,
-            "Val SSIM": avg_ssim
+            "Validation MSE Loss": avg_mse_loss,
+            "Validation Grad Var Loss": avg_grad_var_loss,
+            "Validation PSNR": avg_psnr,
+            "Validation SSIM": avg_ssim,
+            "Validation Total Loss": avg_total_loss,
         })
-        
+
 
         # Determine if the model should be saved based on multiple metrics improving
         improved_metrics = 0
+        if avg_total_loss < best_metrics['total_loss']:
+            best_metrics['total_loss'] = avg_total_loss
+            improved_metrics += 1
         if avg_mse_loss < best_metrics['mse_loss']:
             best_metrics['mse_loss'] = avg_mse_loss
+            improved_metrics += 1
+        if avg_grad_var_loss < best_metrics['grad_var_loss']:
+            best_metrics['grad_var_loss'] = avg_grad_var_loss
             improved_metrics += 1
         if avg_psnr > best_metrics['psnr']:
             best_metrics['psnr'] = avg_psnr
@@ -242,11 +264,54 @@ def train_model(
     experiment.finish()
 
 
+@torch.inference_mode()
+def evaluate(net, dataloader, device):
+    net.eval()
+    num_val_batches = len(dataloader)
+
+    # Initialize metrics
+    mse_metric = torchmetrics.MeanSquaredError().to(device)
+    psnr_metric = torchmetrics.PeakSignalNoiseRatio().to(device)
+    ssim_metric = torchmetrics.StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
+    grad_metric = GradientVariance(patch_size=10, device=device)
+
+    total_mse = 0
+    total_psnr = 0
+    total_grad_var_loss = 0 
+    total_ssim = 0
+
+    # iterate over the validation set
+    for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
+        frames, future_frame_true = batch
+        frames = frames.to(device, dtype=torch.float32)
+        future_frame_true = future_frame_true.to(device, dtype=torch.float32)
+        
+        # predict the future frame
+        future_frame_pred = net(frames)
+
+        # Update metrics
+        total_mse += mse_metric(future_frame_pred, future_frame_true).item()
+        total_psnr += psnr_metric(future_frame_pred, future_frame_true).item()
+        total_ssim += ssim_metric(future_frame_pred, future_frame_true).item()
+        total_grad_var_loss += grad_metric(future_frame_pred, future_frame_true).item()
+
+    net.train()
+
+    # Return the average metrics
+    avg_total_loss = (total_mse + 0.2 * total_grad_var_loss) / num_val_batches
+    avg_mse = total_mse / num_val_batches
+    avg_psnr = total_psnr / num_val_batches
+    avg_ssim = total_ssim / num_val_batches
+    avg_grad_var_loss = total_grad_var_loss / num_val_batches
+
+    return avg_total_loss, avg_mse, avg_grad_var_loss, avg_psnr, avg_ssim
+
 # Main script execution
 if __name__ == '__main__':
     args = get_args()
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     
+    # ---------------------------------- choose device ----------------------------------
     # Check for CUDA availability
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -262,10 +327,13 @@ if __name__ == '__main__':
 
     logging.info(f'Using device {device}')
 
-    train_transform = customized_transform.SegmentationTrainingTransform()
-    val_transform = customized_transform.SegmentationValidationTransform()
+    train_transform = customized_transform.SSLTrainingTransform()
+    val_transform = customized_transform.SSLValidationTransform()
 
-    # choose model
+    # train_transform = customized_transform.SegmentationTrainingTransform()
+    # val_transform = customized_transform.SegmentationValidationTransform()
+
+    # ---------------------------------- choose model ----------------------------------
     if args.model_name == 'Reconstructor':
         # Initialize the model
         model = VideoFrameReconstructor(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
@@ -281,8 +349,6 @@ if __name__ == '__main__':
         model = VideoFrameReconstructor_LessDownSample(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
         model.to(device)
         print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters())}')
-
-    args = get_args()
 
     train_model(
         model=model,
@@ -301,7 +367,7 @@ if __name__ == '__main__':
         subset_test=args.subset_test,
         root_dir=args.root_dir,
         lstm_hidden_size=args.LSTM_hidden_size,
-        num_layers=args.num_layers
+        num_layers=args.num_layers,
     )
 
 

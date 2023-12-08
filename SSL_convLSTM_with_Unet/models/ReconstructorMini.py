@@ -15,6 +15,7 @@ class VideoFrameReconstructor_Mini(nn.Module):
         self.encoder = Encoder(input_channels=C, final_channel=encoder_final_channel)
         self.reconstructor = ConvLSTM(input_dim=encoder_final_channel, hidden_dim=LSTM_hidden_size, kernel_size=(3, 3), num_layers=num_layers, batch_first=True, bias=True, return_all_layers=False)
         self.decoder = Decoder(input_channels=LSTM_hidden_size, final_channel=C)
+        self.normalize = nn.Tanh()
 
     def forward(self, x):
         batch_size, _, _, H, W = x.size()  # x is expected to be of shape [B, T, C, H, W]
@@ -31,6 +32,9 @@ class VideoFrameReconstructor_Mini(nn.Module):
         final_hidden = last_states[-1][0]  # Assuming return_all_layers=False
         
         next_frame_prediction = self.decoder(final_hidden)
+        
+        # Normalize the output
+        next_frame_prediction = self.normalize(next_frame_prediction)
 
         return next_frame_prediction
     

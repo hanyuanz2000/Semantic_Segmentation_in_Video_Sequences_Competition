@@ -10,6 +10,7 @@ class VideoFrameReconstructor_LessDownSample(nn.Module):
         self.num_frames = num_frames
         self.hidden_size = LSTM_hidden_size
         self.num_layers = num_layers
+        self.normalize = nn.Tanh()
 
         # Encoder and Decoder should have appropriate parameters passed
         self.encoder = Encoder(input_channels=C, final_channel=encoder_final_channel)
@@ -26,18 +27,15 @@ class VideoFrameReconstructor_LessDownSample(nn.Module):
         # Stack encoded frames and pass through ConvLSTM
         encoded_sequence = torch.stack(encoded_frames, dim=1)  # Shape [B, T, C, H', W']
 
-        print(f'encoded_sequence.shape: {encoded_sequence.shape}')
-
         _, last_states = self.reconstructor(encoded_sequence)
 
         # Use the final hidden state to predict the next frame
         final_hidden = last_states[-1][0]  # Assuming return_all_layers=False
-
-        print(f'final_hidden.shape: {final_hidden.shape}')
         
         next_frame_prediction = self.decoder(final_hidden)
 
-        print(f'next_frame_prediction.shape: {next_frame_prediction.shape}')
+        # Normalize the output
+        next_frame_prediction = self.normalize(next_frame_prediction)
 
         return next_frame_prediction
     
