@@ -45,7 +45,7 @@ def get_args():
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
-    parser.add_argument('--dataset', type=str, default='SSL_Reconstruction_Dataset', help='Choose the dataset function to train on') 
+    parser.add_argument('--dataset_choice', type=str, default='SSL_Reconstruction_Dataset', help='Choose the dataset function to train on') 
     parser.add_argument('--frame_target', type=bool, default=False, help='Whether to use frame target or mask target (only for VideoFrameDataPt))')
     parser.add_argument('--first', type=int, default=1, help='first index to load (only for VideoFrameDataPt))')
     parser.add_argument('--last', type=int, default=100, help='last index to load (only for VideoFrameDataPt))')
@@ -71,6 +71,10 @@ def train_model(
     root_dir,
     lstm_hidden_size,
     num_layers,
+    dataset_choice,
+    frame_target,
+    first,
+    last
     ):
 
     # set project name and initialize experiment 
@@ -100,8 +104,12 @@ def train_model(
     
     # load data
     # for this SSL, we use unlabeled data for training and labeled data for validation, so that in the second phase, model can't cheat by using labeled data
-    train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
-    val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
+    if dataset_choice == 'SSL_Reconstruction_Dataset':
+        train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
+        val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
+    elif dataset_choice == 'VideoFrameDataPt':
+        train_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='train', transform=train_transform, frame_target=frame_target, first=first, last=last)
+        val_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='val', transform=val_transform, frame_target=frame_target, first=first, last=last)
     n_train, n_val = len(train_set), len(val_set)
 
     if subset_test: # Only use a subset of the data for testing
@@ -330,9 +338,6 @@ if __name__ == '__main__':
     train_transform = customized_transform.SSLTrainingTransform()
     val_transform = customized_transform.SSLValidationTransform()
 
-    # train_transform = customized_transform.SegmentationTrainingTransform()
-    # val_transform = customized_transform.SegmentationValidationTransform()
-
     # ---------------------------------- choose model ----------------------------------
     if args.model_name == 'Reconstructor':
         # Initialize the model
@@ -368,6 +373,10 @@ if __name__ == '__main__':
         root_dir=args.root_dir,
         lstm_hidden_size=args.LSTM_hidden_size,
         num_layers=args.num_layers,
+        dataset_choice=args.dataset_choice,
+        frame_target = args.frame_target,
+        first = args.first,
+        last = args.last,
     )
 
 
