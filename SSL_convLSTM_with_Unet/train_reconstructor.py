@@ -47,8 +47,8 @@ def get_args():
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
     parser.add_argument('--dataset_choice', type=str, default='SSL_Reconstruction_Dataset', help='Choose the dataset function to train on') 
     parser.add_argument('--frame_target', type=bool, default=False, help='Whether to use frame target or mask target (only for VideoFrameDataPt))')
-    parser.add_argument('--first', type=int, default=1, help='first index to load (only for VideoFrameDataPt))')
-    parser.add_argument('--last', type=int, default=100, help='last index to load (only for VideoFrameDataPt))')
+    parser.add_argument('--first', type=int, default=0, help='first index to load (only for VideoFrameDataPt))')
+    parser.add_argument('--last', type=int, default=1, help='last index to load (only for VideoFrameDataPt))')
     
     return parser.parse_args()
 
@@ -105,11 +105,11 @@ def train_model(
     # load data
     # for this SSL, we use unlabeled data for training and labeled data for validation, so that in the second phase, model can't cheat by using labeled data
     if dataset_choice == 'SSL_Reconstruction_Dataset':
-        train_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
+        train_set = data_loading.SSL_Reconstructioohn_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
         val_set = data_loading.SSL_Reconstruction_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
     elif dataset_choice == 'VideoFrameDataPt':
-        train_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='train', transform=train_transform, frame_target=frame_target, first=first, last=last)
-        val_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='val', transform=val_transform, frame_target=frame_target, first=first, last=last)
+        train_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='unlabeled_partition', transform=train_transform, frame_target=frame_target, first=first, last=last)
+        val_set = data_loading.VideoFrameDataPt(root_dir=root_dir, subset='train_partition', transform=val_transform, frame_target=frame_target, first=0, last=1)
     n_train, n_val = len(train_set), len(val_set)
 
     if subset_test: # Only use a subset of the data for testing
@@ -270,7 +270,6 @@ def train_model(
     if best_model_path:
         print(f'Best model saved at {best_model_path}')
     experiment.finish()
-
 
 @torch.inference_mode()
 def evaluate(net, dataloader, device):

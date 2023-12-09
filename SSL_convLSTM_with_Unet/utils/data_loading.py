@@ -132,7 +132,8 @@ class Hidden_Dataset(Dataset):
         return frames, torch.zeros(1)
 
 class VideoFrameDataPt(Dataset):
-    def __init__(self, root_dir ,subset='unlabeled_partition', frame_target=False, first=None, last = None, transform=None):
+    def __init__(self, root_dir ,subset='unlabeled_partition', frame_target=False, first=0, last = 3, transform=None):
+        
         """
         Args:
             root_dir (string): Directory with all the videos (subfolders).
@@ -142,35 +143,44 @@ class VideoFrameDataPt(Dataset):
         self.root_dir = root_dir
         self.transform = transform
         self.subset = subset
+        self.subset_dir = os.path.join(root_dir, subset)
+    
+        first = max(0, first)
+        last = min(last, len(os.listdir(self.subset_dir)))
+        print(f'Start to call VideoFrameDataPt dataset with first {first} and last {last} files')
         
-        # handle partition pt and extract first n files
-        if first and last:
-            files = sorted(os.listdir(os.path.join(root_dir, subset)))[first: last]
-            self.frames = []
-            self.target = []
-            for f in files:
-                f_name = '/'.join([root_dir, subset, f_name])
-                tensor = torch.load(f_name)
-                print(tensor.size())
-                # first 11 frames in each partition as frames, last as target
-                frames = tensor[:, :11, :, :, :]
-                target = tensor[:, 22, :, :, :]
-                self.frames.append(frames)
-                self.target.append(target)
+        files = sorted(os.listdir(os.path.join(root_dir, subset)))[first: last]
+        self.frames = []
+        self.target = []
+        for f in files:
+            f_name = '/'.join([root_dir, subset, f])
+            tensor = torch.load(f_name)
+            # first 11 frames in each partition as frames, last as target
+            frames = tensor['frames']
+            target = tensor['future_frames']
+            self.frames.append(frames)
+            self.target.append(target)
 
-            self.frames = torch.cat(self.frames, dim=0)
-            self.target = torch.cat(self.target, dim=0)
+        self.frames = torch.cat(self.frames, dim=0)
+        self.target = torch.cat(self.target, dim=0)
 
-        # handle pt file with no partitions
-        else:
-            input_file_name = os.path.join(root_dir, subset+'.pt')
-            if frame_target:
-                target_file_name = os.path.join(root_dir, 'target_'+subset+'_frame.pt')
-            else:
-                target_file_name = os.path.join(root_dir, 'target_'+subset+'_mask.pt')
-            
-            self.frames = torch.load(input_file_name)
-            self.target = torch.load(target_file_name)
+        print('concatenated frames shape: ', self.frames.shape)
+        print('concatenated target shape: ', self.target.shape)
+    
+    def __len__(self):
+        return self.frames.shape[0]
+
+    def __getitem__(self, idx):
+        frames = self.frames[idx] # single input dp
+        target = self.target[idx]
+        if self.transform:
+            image_frames = [transforms.ToPILImage()(f) for f in frames]
+            target = transforms.ToPILImage()(target)
+            frames, target = self.transform(image_frames, target)
+            frames = torch.stack(frames)
+
+        return frames, target # convert input to list of tensors
+
 
 def plot_frame(ax, frame, title):
     """ Plot a single frame with title. """
@@ -213,6 +223,40 @@ def test_SSL(subset, transform=None):
 
         break
 
+def test_pt(subset, transform=None):
+    # Test the dataset class by loading the first sample
+    print(f'Testing pt {subset} dataset with transform: {transform}')
+    dataset = VideoFrameDataPt(root_dir, subset, transform=transform)
+    print('Dataset length: ', len(dataset))
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
+
+    for i_batch, sample_batched in enumerate(dataloader):
+        frames, frame_22 = sample_batched
+
+        print(f'frames type: {type(frames)}')
+        print(f'frames shape: {frames.shape}')
+        print(f'frames: {frames[0, 0, :, :, :]}')
+        frames_flatten = frames.view(-1)
+        print(min(frames_flatten), max(frames_flatten))
+        
+        print(f'frame_22 type: {type(frame_22)}')
+        print(f'frame_22 shape: {frame_22.shape}')
+        print(f'frame_22: {frame_22.squeeze(0)}')
+        frame_22_flatten = frame_22.view(-1)
+        print(min(frame_22_flatten), max(frame_22_flatten))
+
+        # Plot the first and last frames
+        first_frame = frames[0, 0, :, :, :]
+        print(f'First frame shape: {first_frame.shape}')
+
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(12, 6))  # Adjust figsize as needed
+        
+        plot_frame(axes[0], first_frame, 'First frame')
+        plot_frame(axes[1], frame_22.squeeze(0), 'Frame 22')
+
+        plt.show()
+        break
+
 if __name__ == '__main__':
     # Example usage and Test
     root_dir = '/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data'
@@ -223,7 +267,8 @@ if __name__ == '__main__':
 
     transform1 = SSLTrainingTransform()
     transform2 = SegmentationTrainingTransform()
-    test_SSL('train', transform=transform1)
-    test_SSL('train', transform=transform2)
+    # test_SSL('train', transform=transform1)
+    # test_SSL('train', transform=transform2)
+    test_pt('train_partition', transform=transform1)
     
     
