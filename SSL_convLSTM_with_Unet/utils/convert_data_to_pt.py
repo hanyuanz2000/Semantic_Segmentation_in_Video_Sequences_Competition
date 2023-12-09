@@ -6,9 +6,7 @@ import os
 root_dir = '/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data'
 subsets = ['train']
 
-
 partition_size = 1000
-
 
 # Iterate over each subset and collect frames
 
