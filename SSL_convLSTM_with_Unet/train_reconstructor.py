@@ -49,7 +49,8 @@ def get_args():
     parser.add_argument('--frame_target', type=bool, default=False, help='Whether to use frame target or mask target (only for VideoFrameDataPt))')
     parser.add_argument('--first', type=int, default=0, help='first index to load (only for VideoFrameDataPt))')
     parser.add_argument('--last', type=int, default=1, help='last index to load (only for VideoFrameDataPt))')
-    
+    parser.add_argument('--load_checkpoint', type=bool, default=False, help='Whether to load a checkpoint')
+    parser.add_argument('--checkpoint_path', type=str, default='', help='Path to checkpoint to load')
     return parser.parse_args()
 
 # Function to train the model
@@ -354,6 +355,12 @@ if __name__ == '__main__':
         model.to(device)
         print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters())}')
 
+    # ---------------------------------- load checkpoint ----------------------------------
+    if args.load_checkpoint:
+        checkpoint = torch.load(args.checkpoint_path)
+        # send to device
+        model.load_state_dict(torch.load(args.checkpoint_path, map_location=device))
+    
     train_model(
         model=model,
         device=device,

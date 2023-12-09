@@ -41,10 +41,7 @@ def get_args():
     parser.add_argument('--path_to_reconstructor_weights', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/Reconstructor Mini_Dec05-10:00_Opti_RMSprop_LR_0.001_BS_4_WD_1e-06_Mom_0.9_GradClip_1.0/best_model_epoch_1.pth', help='Path to the weights of the reconstructor')
     parser.add_argument('--reconstructor_name', type=str, default='VideoFrameReconstructor_Mini', help='Name of the reconstructor')
     parser.add_argument('--subset_test', type=bool, default=False, help='Whether to use a subset of the data for testing')
-<<<<<<< HEAD
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
-=======
->>>>>>> cf3c16a1ab0ea9450e6ab0037448de67ca178c82
 
     return parser.parse_args()
 
@@ -64,12 +61,8 @@ def train_model(
         model_name,
         reconstructor_name,
         reconstructor,
-<<<<<<< HEAD
         subset_test,
         root_dir
-=======
-        subset_test
->>>>>>> cf3c16a1ab0ea9450e6ab0037448de67ca178c82
     ):
 
     # set project name and initialize experiment 
@@ -283,12 +276,8 @@ if __name__ == '__main__':
         model_name=args.model_name,
         reconstructor_name = args.reconstructor_name,
         reconstructor = reconstructor,
-<<<<<<< HEAD
         subset_test = args.subset_test,
         root_dir = args.root_dir
-=======
-        subset_test = args.subset_test
->>>>>>> cf3c16a1ab0ea9450e6ab0037448de67ca178c82
     )
 
 
