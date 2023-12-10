@@ -29,7 +29,7 @@ def get_args():
     
     parser.add_argument('--epochs', type=int, default=1, help='Number of epochs')
     parser.add_argument('--batch_size', type=int, default=2, help='Batch size')
-    parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--learning_rate', type=float, default=1e-4, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum')
     parser.add_argument('--gradient_clipping', type=float, default=1.0, help='Gradient clipping')
@@ -230,7 +230,7 @@ def evaluate(model, dataloader, device, amp):
         for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
             frames, true_mask = batch
             bs, C, H, W = frames.shape
-            
+
             # conver to (bs, seq_len * C, H, W)
             frames = frames.to(device, dtype=torch.float32, memory_format=torch.channels_last)
 
