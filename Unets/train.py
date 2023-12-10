@@ -17,7 +17,6 @@ from models.unet_model import UNet
 from utils import data_loading
 from utils import customized_transform
 from utils.dice_score import dice_loss
-from evaluate import evaluate
 from datetime import datetime
 import numpy as np
 
@@ -29,9 +28,9 @@ def get_args():
     parser = argparse.ArgumentParser(description='Train the UNet on images and target masks')
     
     parser.add_argument('--epochs', type=int, default=1, help='Number of epochs')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size')
+    parser.add_argument('--batch_size', type=int, default=2, help='Batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--weight_decay', type=float, default=1e-6, help='Weight decay')
+    parser.add_argument('--weight_decay', type=float, default=1e-4, help='Weight decay')
     parser.add_argument('--momentum', type=float, default=0.9, help='Momentum')
     parser.add_argument('--gradient_clipping', type=float, default=1.0, help='Gradient clipping')
     parser.add_argument('--amp', type=bool, default=False, help='Enable Automatic Mixed Precision (AMP)')
@@ -60,7 +59,7 @@ def train_model(
     ):
 
     # set project name and initialize experiment 
-    project_name = 'VideoFrameSegmentation' + '_' + model_name
+    project_name = 'Unet_segmenatation' + '_' + model_name
     
     now = datetime.now()
     dt_string = 'Dec' + now.strftime("%d") + '-' + now.strftime("%H:%M")
@@ -84,15 +83,15 @@ def train_model(
     })
     
     # load data
-    train_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
-    val_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
+    train_set = data_loading.one_to_one_Segmentation_Dataset(root_dir=root_dir, subset='train', transform=train_transform)
+    val_set = data_loading.one_to_one_Segmentation_Dataset(root_dir=root_dir, subset='val', transform=val_transform)
 
     n_train, n_val = len(train_set), len(val_set)
 
     if subset_test: # Only use a subset of the data for testing
         # Define the size of the subset as 5% of the dataset
-        train_subset_size = int(0.2 * n_train)
-        val_subset_size = int(0.2 * n_val)
+        train_subset_size = int(0.03 * n_train)
+        val_subset_size = int(0.03 * n_val)
 
         # Generate random indices for train and validation subsets
         train_subset_indices = np.random.choice(range(n_train), train_subset_size, replace=False)
@@ -134,32 +133,27 @@ def train_model(
 
         with tqdm(total=n_train, desc=f'Epoch {epoch + 1}/{epochs}', unit='img') as pbar:
             for batch in train_loader:
-                frames, true_masks = batch
-                bs, seq_len, C, H, W = frames.shape
+                frame, true_masks = batch
+                bs, C, H, W = frame.shape
                 
-                # conver to (bs, seq_len * C, H, W)
-                frames = frames.contiguous()
-                frames= frames.view(bs, seq_len*C, H, W)
-                frames = frames.to(device, dtype=torch.float32)
+                frame = frame.to(device, dtype=torch.float32)
                 
                 # reshape true_masks from (bs, 1, H, W) to (bs, H, W)
                 true_masks = true_masks.squeeze(1)
                 true_masks = true_masks.to(device,  dtype=torch.long)
 
-                masks_pred = model(frames)
+                masks_pred = model(frame)
 
-                print('-----------------')
-                print(masks_pred.shape)
-                print(masks_pred)
+                # print(f'masks_pred shape: {masks_pred.shape}')
+                # print(masks_pred)
 
                 loss = criterion(masks_pred, true_masks)
 
                 # Apply softmax to masks_pred to get probabilities
                 masks_pred_softmax = F.softmax(masks_pred, dim=1)
 
-                print('-----------------')
-                print(masks_pred_softmax.shape)
-                print(masks_pred_softmax)
+                # print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
+                # print(masks_pred_softmax)
                 
                 # Convert true_masks to one-hot encoding
                 true_masks_one_hot = F.one_hot(true_masks, num_classes=model.n_classes)
@@ -179,13 +173,13 @@ def train_model(
                 loss.backward()
                 optimizer.step()
 
-                pbar.update(frames.shape[0])
+                pbar.update(frame.shape[0])
                 epoch_loss += loss.item()
 
                 experiment.log({"loss": loss.item()})
 
                 pbar.set_postfix(**{'loss (batch)': loss.item()})
-            
+
 
         # Validation part after each epoch
         val_jaccard, val_loss = evaluate(model, val_loader, device, amp)
@@ -221,6 +215,48 @@ def train_model(
         print(f'Best model saved at {best_model_path}')
     experiment.finish()
 
+@torch.inference_mode()
+def evaluate(model, dataloader, device, amp):
+    model.eval()
+    num_val_batches = len(dataloader)
+    jaccard = torchmetrics.JaccardIndex(task="multiclass", num_classes=model.n_classes).to(device)
+    criterion = nn.CrossEntropyLoss()
+
+    total_jaccard = 0
+    total_loss = 0
+
+    # iterate over the validation set
+    with torch.autocast(device.type if device.type != 'mps' else 'cpu', enabled=amp):
+        for batch in tqdm(dataloader, total=num_val_batches, desc='Validation round', unit='batch', leave=False):
+            frames, true_mask = batch
+            bs, C, H, W = frames.shape
+            
+            # conver to (bs, seq_len * C, H, W)
+            frames = frames.to(device, dtype=torch.float32, memory_format=torch.channels_last)
+
+            true_mask = true_mask.squeeze(1)
+            true_mask = true_mask.to(device,  dtype=torch.long)
+            
+            masks_pred = model(frames)
+            masks_pred_softmax = F.softmax(masks_pred, dim=1)
+            mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
+            jac_score = jaccard(mask_pred_argmax, true_mask).item()
+
+            # Calculate Jaccard Index for each batch and accumulate
+            batch_jaccard = jac_score
+            total_jaccard += batch_jaccard
+
+            # Calculate Cross-Entropy Loss
+            loss = criterion(masks_pred, true_mask)
+            total_loss += loss.item()
+
+    model.train()
+    
+    avg_jaccard = total_jaccard / max(num_val_batches, 1)
+    avg_loss = total_loss / max(num_val_batches, 1)
+
+    return avg_jaccard, avg_loss
+
 # Main script execution
 if __name__ == '__main__':
     args = get_args()
@@ -245,7 +281,7 @@ if __name__ == '__main__':
     val_transform = customized_transform.SegmentationValidationTransform()
 
     # Dimension of the input to the model
-    input_channel = 33  # 3 RGB channels per frame, 11 frames
+    input_channel = 3  # 3 RGB channels per frame, 11 frames
     output_channel = 49  # 22 classes for segmentation
 
     # Initialize the UNet model
