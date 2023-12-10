@@ -155,7 +155,7 @@ class Hidden_Dataset(Dataset):
         frames = [Image.open(os.path.join(video_path, f'image_{i}.png')).convert('RGB') for i in range(11)]
         frames = torch.stack([transforms.ToTensor()(frame) for frame in frames])
 
-        return frames, torch.zeros(1)
+        return frames, torch.zeros(1), video_folder
 
 def plot_frame(ax, frame, title):
     """ Plot a single frame with title. """
@@ -172,15 +172,16 @@ def plot_frame(ax, frame, title):
 def test_hidden(transform=None):
     print(f'\n------Testing load and transform for hidden subset------')
     dataset = Hidden_Dataset(root_dir, transform=transform)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
 
     for i_batch, sample_batched in enumerate(dataloader):
-        frames, mask = sample_batched
-        print(f'  Batch {i_batch + 1}:')
-        print(f'  Frames size: {frames.size()}') # (batch_size, seq_len, C, H, W)
-        print(f'  Mask size: {mask.size()}')
+        frames, mask, folder_name = sample_batched
+        # print(f'  Batch {i_batch + 1}:')
+        # print(f'  Frames size: {frames.size()}') # (batch_size, seq_len, C, H, W)
+        # print(f'  Mask size: {mask.size()}')
+        print(f'  Folder name: {folder_name}')
         
-        if i_batch == 0:
+        if i_batch == 102:
             break
 
 def test_labeled(subset, transform=None):
@@ -221,7 +222,7 @@ def test_one_to_one(subset, transform=None):
 def test_last_frame_and_mask(subset, transform=None):
     print(f'\n------Testing load and transform for {subset} subset------')
     dataset = LastFrame_and_Mask_Dataset(root_dir, subset=subset, transform=transform)
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True, num_workers=4)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=4)
 
     for i_batch, sample_batched in enumerate(dataloader):
         frame, mask = sample_batched
@@ -246,10 +247,10 @@ if __name__ == '__main__':
     # Test transforms
     from customized_transform import SegmentationTrainingTransform, SegmentationValidationTransform
 
-    # test_hidden('hidden')
+    test_hidden('hidden')
     # test_labeled('train', transform=SegmentationTrainingTransform())
     # test_labeled('train')
     # test_labeled('val')
     # test_one_to_one('train', transform=SegmentationTrainingTransform())
-    test_last_frame_and_mask('train', transform=SegmentationTrainingTransform())
+    # test_last_frame_and_mask('train', transform=SegmentationTrainingTransform())
 
