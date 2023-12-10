@@ -24,7 +24,7 @@ import numpy as np
 def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
-    parser.add_argument('--saved_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unet_Direct_Pred_Dec09-21:41_lr0.001_bs2_wd0.0001_mom0.9_gc1.0/best_model_epoch_1.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/best_model_epoch_11.pth', help='Directory to save the trained model')
 
     return parser.parse_args()
 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     model.to(device)
 
     # Load the trained model
-    model.load_state_dict(torch.load(args.saved_model_dir))
+    model.load_state_dict(torch.load(args.saved_model_dir, map_location=device))
 
     # Inference on hidden dataset
     inferece = inferece(
