@@ -1,3 +1,8 @@
+"""
+This script is used to do inference on the validation dataset and test the inference result.
+The data of the first 11 frames are fed into the Reconstructor model to predict the 22nd frame.
+The predicted 22nd frame is then fed into the segmentation model to predict the mask.
+"""
 import argparse
 import logging
 import torch
@@ -32,7 +37,6 @@ def get_args():
 
     return parser.parse_args()
 
-
 def inferece(
         seg_model,
         recons_model,
@@ -40,70 +44,72 @@ def inferece(
         root_dir,
     ):
     # Initialize the dataset
-    hidden_dataset = data_loading.Hidden_Dataset(
-        root_dir=root_dir,
-        transform=customized_transform.SegmentationValidationTransform()
-    )
+    validation_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='val', transform=customized_transform.SegmentationValidationTransform())
 
     # Initialize the dataloader
-    hidden_loader = DataLoader(hidden_dataset, batch_size=1, shuffle=False)
+    val_loader = DataLoader(validation_set, batch_size=1, shuffle=True)
 
     seg_model.eval()
     recons_model.eval()
 
-    tensor_record = []
+    jaccard = torchmetrics.JaccardIndex(task="multiclass", num_classes=seg_model.n_classes).to(device)
+    jaccard_record = []
     i = 0
 
     with torch.no_grad():
-        for frames, _, video_name in tqdm(hidden_loader, desc="Inference"):
+        for frames, mask in tqdm(val_loader, desc="Inference"):
             bs, seq_len, C, H, W = frames.shape
-            
-            # conver to (bs, seq_len * C, H, W)
             frames = frames.to(device, dtype=torch.float32)
-            
+            mask = mask.to(device)
+
             predicted_22nd_frame = recons_model(frames)
             predicted_22nd_frame = predicted_22nd_frame.to(device)
             
-            masks_pred = seg_model(predicted_22nd_frame) # [1, 49, 160, 240]
-            masks_pred_softmax = F.softmax(masks_pred, dim=1) # [1, 49, 160, 240]
-            mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1) # [1, 160, 240]
+            masks_pred = seg_model(predicted_22nd_frame)
 
+            masks_pred_softmax = F.softmax(masks_pred, dim=1)
+            mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
+
+            # print some info for the first batch
             if i == 0:
                 # print shape
+                print(f'mask shape: {mask.shape}')
+                print(f'mask double squeeze shape: {mask.squeeze(0).squeeze(0).shape}')
                 print(f'frames shape: {frames.shape}')
-                print(f'predicted_22nd_frame shape: {predicted_22nd_frame.shape}')
+                print(f'predicted 22nd frame shape: {predicted_22nd_frame.shape}')
                 print(f'masks_pred shape: {masks_pred.shape}')
-                print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
                 print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
 
+                # also get the last frame from frames
+                last_frame = frames[0, -1, :, :, :]
+                print(f'last frame shape: {last_frame.shape}')
+
                 # visualize the mask and the predicted mask
-                fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 6))
-                plot_frame(axes[0], frames[0, -1, :, :, :], '11th Frame')
-                axes[1].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
-                plt.show()
+                fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(15, 6))
+                axes[0].imshow(mask.squeeze(0).squeeze(0).cpu().numpy())
+                axes[0].set_title('Ground Truth')
+                plot_frame(axes[1], last_frame, '11th Frame')
+                axes[2].imshow(predicted_22nd_frame.squeeze(0).permute(1, 2, 0).cpu().numpy())
+                axes[2].set_title('Predicted 22nd Frame')
+                axes[3].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
+                axes[3].set_title('Predicted Mask')
 
-                first_pred_mask = mask_pred_argmax.squeeze(0).cpu().numpy()
-            
-            if i <= 10:
-                 print(f'video_name: {video_name}')
+            plt.show()
 
-            if i == 10:
-                break
-
-            # mask_pred_argmax has shape (1, 160, 240)
-            tensor_record.append(mask_pred_argmax.cpu())
+            # calculate jaccard score
+            jaccard_score = jaccard(mask_pred_argmax.squeeze(0), mask.squeeze(0).squeeze(0))
+            jaccard_record.append(jaccard_score)
 
             i += 1
-
-    # output tensor is a list 2000 tensors, each has shape (1, 160, 240), I want to concatenate them to a tensor with shape (2000, 160, 240)
-    result_tensor = torch.cat(tensor_record, dim=0)
-    # check the shape of the result tensor
-    print(f'Result tensor shape: {result_tensor.shape}') # (2000, 160, 240)
-
-    assert result_tensor.shape == (2000, 160, 240), 'Result tensor shape is not correct'
-    assert np.array_equal(first_pred_mask, result_tensor[0].squeeze(0).cpu().numpy()), 'First predicted mask is not correct'
-    
-    return result_tensor
+            if i % 20 == 0:
+                print(f'Processed {i} batches')
+            if i == 400:
+                break
+        
+        jaccard_scores_numpy = [score.cpu().numpy() for score in jaccard_record]
+        # Calculate mean using numpy
+        mean_jaccard_score = np.mean(jaccard_scores_numpy)
+        print(f'Mean Jaccard score: {mean_jaccard_score}')
 
 def plot_frame(ax, frame, title):
     """ Plot a single frame with title. """
@@ -116,7 +122,7 @@ def plot_frame(ax, frame, title):
 
     ax.imshow(frame_image)
     ax.set_title(title)
-
+    
 if __name__ == '__main__':
     args = get_args()
     logging.info(args)
@@ -147,7 +153,4 @@ if __name__ == '__main__':
     recons_model.load_state_dict(torch.load(args.saved_recon_model_dir, map_location=device))
 
     # Inference
-    inference_result = inferece(seg_model, recons_model, device, args.root_dir)
-    inference_result = inference_result.numpy()
-    print(f'Inference result shape: {inference_result.shape}') # (2000, 160, 240)
-    # np.save('inference_result.npy', inference_result)
+    inferece(seg_model, recons_model, device, args.root_dir)

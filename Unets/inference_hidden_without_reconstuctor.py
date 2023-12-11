@@ -1,3 +1,11 @@
+"""
+This script is used to do inference on the hidden dataset and save the inference result.
+We will directly use the 11th frame to do inference (Pass the 11th frame to the segmentation model).
+We do this due to the inadquecy the reconstruction quality of the Reconstructor model.
+This is different from the inference_hidden_with_reconstuctor.py
+where we use the Reconstructor model to predict the 22nd frame and then pass the 22nd frame to the segmentation model.
+"""
+
 import argparse
 import logging
 import torch
@@ -26,11 +34,12 @@ def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
     parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unets_best_model_epoch_11.pth', help='Directory to save the trained model')
-    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/recons_best_model_07.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_Reconstructor/checkpoints/recon_best_model_71.pth', help='Directory to save the trained model')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
 
     return parser.parse_args()
+
 
 def inferece(
         seg_model,
@@ -38,64 +47,65 @@ def inferece(
         root_dir,
     ):
     # Initialize the dataset
-    validation_set = data_loading.Labeled_Segementation_Dataset(root_dir=root_dir, subset='val', transform=customized_transform.SegmentationValidationTransform())
+    hidden_dataset = data_loading.Hidden_Dataset(
+        root_dir=root_dir,
+        subset='hidden',
+        transform=customized_transform.SegmentationValidationTransform())
 
     # Initialize the dataloader
-    val_loader = DataLoader(validation_set, batch_size=1, shuffle=True)
+    hidden_loader = DataLoader(hidden_dataset, batch_size=1, shuffle=False)
 
     seg_model.eval()
-
-    jaccard = torchmetrics.JaccardIndex(task="multiclass", num_classes=seg_model.n_classes).to(device)
-    jaccard_record = []
+    result_tensor = torch.empty(2000, 160, 240).to(device)
     i = 0
 
     with torch.no_grad():
-        for frames, mask in tqdm(val_loader, desc="Inference"):
+        for frames, _, video_name in tqdm(hidden_loader, desc="Inference"):
             bs, seq_len, C, H, W = frames.shape
+            
             last_frame = frames[:, -1, :, :, :]
             last_frame = last_frame.to(device, dtype=torch.float32)
-            mask = mask.to(device)
             
-            masks_pred = seg_model(last_frame)
+            masks_pred = seg_model(last_frame) # [1, 49, 160, 240]
+            masks_pred_softmax = F.softmax(masks_pred, dim=1) # [1, 49, 160, 240]
+            mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1) # [1, 160, 240]
 
-            masks_pred_softmax = F.softmax(masks_pred, dim=1)
-            mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
-
-            # print some info for the first batch
-            if i == 0:
+            if i == 1000:
                 # print shape
-                print(f'mask shape: {mask.shape}')
                 print(f'frames shape: {frames.shape}')
-                print(f'11th frames shape: {last_frame.shape}')
+                print(f'11th (last) frames shape: {last_frame.shape}')
                 print(f'masks_pred shape: {masks_pred.shape}')
+                print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
                 print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
 
-                # also get the last frame from frames
-                last_frame = frames[0, -1, :, :, :]
-                print(f'last frame shape: {last_frame.shape}')
-
                 # visualize the mask and the predicted mask
-                fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 6))
-                axes[0].imshow(mask.squeeze(0).squeeze(0).cpu().numpy())
-                axes[0].set_title('Ground Truth')
-                plot_frame(axes[1], last_frame, '11th Frame')
-                axes[2].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
-                axes[2].set_title('Predicted Mask')
+                fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 6))
+                plot_frame(axes[0], frames[0, -1, :, :, :], '11th Frame')
+                axes[1].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
+                axes[1].set_title('Predicted Mask')
+                plt.show()
 
-            plt.show()
-
-            # calculate jaccard score
-            jaccard_score = jaccard(mask_pred_argmax.squeeze(0), mask.squeeze(0).squeeze(0))
-            jaccard_record.append(jaccard_score)
-
+                sampled_pred_mask = mask_pred_argmax
+            
+            # mask_pred_argmax has shape (1, 160, 240)
+            result_tensor[i] = mask_pred_argmax
+            
             i += 1
-            if i % 100 == 0:
-                print(f'Processed {i} batches')
-        
-        jaccard_scores_numpy = [score.cpu().numpy() for score in jaccard_record]
-        # Calculate mean using numpy
-        mean_jaccard_score = np.mean(jaccard_scores_numpy)
-        print(f'Mean Jaccard score: {mean_jaccard_score}')
+            if i <= 2:
+                 print(f'video_name: {video_name}')
+
+    ## test the result tensor
+    sample_1 = result_tensor[1000].view(-1)
+    sample1_int = sample_1.int()
+    list1 = sample1_int.tolist()
+    
+    sample2 = sampled_pred_mask.view(-1)
+    sample2_int = sample2.int()
+    list2 = sample2_int.tolist()
+
+    assert list1 == list2, 'something wrong with the result tensor'
+    
+    return result_tensor
 
 def plot_frame(ax, frame, title):
     """ Plot a single frame with title. """
@@ -108,7 +118,7 @@ def plot_frame(ax, frame, title):
 
     ax.imshow(frame_image)
     ax.set_title(title)
-    
+
 if __name__ == '__main__':
     args = get_args()
     logging.info(args)
@@ -134,4 +144,8 @@ if __name__ == '__main__':
     seg_model.load_state_dict(torch.load(args.saved_seg_model_dir, map_location=device))
 
     # Inference
-    inferece(seg_model, device, args.root_dir)
+    inference_result = inferece(seg_model, device, args.root_dir)
+    print(f'Inference result shape: {inference_result.shape}')
+    
+    # save the result tensor
+    torch.save(inference_result, 'final_leaderboard_team_35.pt')

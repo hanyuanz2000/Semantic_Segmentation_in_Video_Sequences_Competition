@@ -1,3 +1,10 @@
+"""
+This script is used to do inference on the validation dataset and test the inference result.
+We will directly use the 11th frame to do inference (Pass the 11th frame to the segmentation model).
+We do this due to the inadquecy the reconstruction quality of the Reconstructor model.
+This is different from the inference_hidden_with_reconstuctor.py
+where we use the Reconstructor model to predict the 22nd frame and then pass the 22nd frame to the segmentation model.
+"""
 import argparse
 import logging
 import torch
@@ -26,7 +33,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
     parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unets_best_model_epoch_11.pth', help='Directory to save the trained model')
-    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_Reconstructor/checkpoints/recon_best_model_71.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/recons_best_model_07.pth', help='Directory to save the trained model')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
 
@@ -34,7 +41,6 @@ def get_args():
 
 def inferece(
         seg_model,
-        recons_model,
         device,
         root_dir,
     ):
@@ -45,7 +51,6 @@ def inferece(
     val_loader = DataLoader(validation_set, batch_size=1, shuffle=True)
 
     seg_model.eval()
-    recons_model.eval()
 
     jaccard = torchmetrics.JaccardIndex(task="multiclass", num_classes=seg_model.n_classes).to(device)
     jaccard_record = []
@@ -54,13 +59,11 @@ def inferece(
     with torch.no_grad():
         for frames, mask in tqdm(val_loader, desc="Inference"):
             bs, seq_len, C, H, W = frames.shape
-            frames = frames.to(device, dtype=torch.float32)
+            last_frame = frames[:, -1, :, :, :]
+            last_frame = last_frame.to(device, dtype=torch.float32)
             mask = mask.to(device)
-
-            predicted_22nd_frame = recons_model(frames)
-            predicted_22nd_frame = predicted_22nd_frame.to(device)
             
-            masks_pred = seg_model(predicted_22nd_frame)
+            masks_pred = seg_model(last_frame)
 
             masks_pred_softmax = F.softmax(masks_pred, dim=1)
             mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1)
@@ -69,9 +72,8 @@ def inferece(
             if i == 0:
                 # print shape
                 print(f'mask shape: {mask.shape}')
-                print(f'mask double squeeze shape: {mask.squeeze(0).squeeze(0).shape}')
                 print(f'frames shape: {frames.shape}')
-                print(f'predicted 22nd frame shape: {predicted_22nd_frame.shape}')
+                print(f'11th frames shape: {last_frame.shape}')
                 print(f'masks_pred shape: {masks_pred.shape}')
                 print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
 
@@ -80,14 +82,12 @@ def inferece(
                 print(f'last frame shape: {last_frame.shape}')
 
                 # visualize the mask and the predicted mask
-                fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(15, 6))
+                fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15, 6))
                 axes[0].imshow(mask.squeeze(0).squeeze(0).cpu().numpy())
                 axes[0].set_title('Ground Truth')
                 plot_frame(axes[1], last_frame, '11th Frame')
-                axes[2].imshow(predicted_22nd_frame.squeeze(0).permute(1, 2, 0).cpu().numpy())
-                axes[2].set_title('Predicted 22nd Frame')
-                axes[3].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
-                axes[3].set_title('Predicted Mask')
+                axes[2].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
+                axes[2].set_title('Predicted Mask')
 
             plt.show()
 
@@ -96,10 +96,8 @@ def inferece(
             jaccard_record.append(jaccard_score)
 
             i += 1
-            if i % 20 == 0:
+            if i % 100 == 0:
                 print(f'Processed {i} batches')
-            if i == 400:
-                break
         
         jaccard_scores_numpy = [score.cpu().numpy() for score in jaccard_record]
         # Calculate mean using numpy
@@ -142,10 +140,5 @@ if __name__ == '__main__':
     seg_model.to(device)
     seg_model.load_state_dict(torch.load(args.saved_seg_model_dir, map_location=device))
 
-    # Initialize the Reconstructor model
-    recons_model = VideoFrameReconstructor_LessDownSample(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
-    recons_model.to(device)
-    recons_model.load_state_dict(torch.load(args.saved_recon_model_dir, map_location=device))
-
     # Inference
-    inferece(seg_model, recons_model, device, args.root_dir)
+    inferece(seg_model, device, args.root_dir)

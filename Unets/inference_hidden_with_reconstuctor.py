@@ -1,3 +1,8 @@
+"""
+This script is used to do inference on the hidden dataset and save the inference result.
+The data of the first 11 frames are fed into the Reconstructor model to predict the 22nd frame.
+The predicted 22nd frame is then fed into the segmentation model to predict the mask.
+"""
 import argparse
 import logging
 import torch
@@ -35,6 +40,7 @@ def get_args():
 
 def inferece(
         seg_model,
+        recons_model,
         device,
         root_dir,
     ):
@@ -42,30 +48,36 @@ def inferece(
     hidden_dataset = data_loading.Hidden_Dataset(
         root_dir=root_dir,
         subset='hidden',
-        transform=customized_transform.SegmentationValidationTransform())
+        transform=customized_transform.SegmentationValidationTransform()
+    )
 
     # Initialize the dataloader
     hidden_loader = DataLoader(hidden_dataset, batch_size=1, shuffle=False)
 
     seg_model.eval()
-    result_tensor = torch.empty(2000, 160, 240).to(device)
+    recons_model.eval()
+
+    tensor_record = []
     i = 0
 
     with torch.no_grad():
         for frames, _, video_name in tqdm(hidden_loader, desc="Inference"):
             bs, seq_len, C, H, W = frames.shape
             
-            last_frame = frames[:, -1, :, :, :]
-            last_frame = last_frame.to(device, dtype=torch.float32)
+            # conver to (bs, seq_len * C, H, W)
+            frames = frames.to(device, dtype=torch.float32)
             
-            masks_pred = seg_model(last_frame) # [1, 49, 160, 240]
+            predicted_22nd_frame = recons_model(frames)
+            predicted_22nd_frame = predicted_22nd_frame.to(device)
+            
+            masks_pred = seg_model(predicted_22nd_frame) # [1, 49, 160, 240]
             masks_pred_softmax = F.softmax(masks_pred, dim=1) # [1, 49, 160, 240]
             mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1) # [1, 160, 240]
 
-            if i == 1000:
+            if i == 0:
                 # print shape
                 print(f'frames shape: {frames.shape}')
-                print(f'11th (last) frames shape: {last_frame.shape}')
+                print(f'predicted_22nd_frame shape: {predicted_22nd_frame.shape}')
                 print(f'masks_pred shape: {masks_pred.shape}')
                 print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
                 print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
@@ -74,28 +86,28 @@ def inferece(
                 fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 6))
                 plot_frame(axes[0], frames[0, -1, :, :, :], '11th Frame')
                 axes[1].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
-                axes[1].set_title('Predicted Mask')
                 plt.show()
 
-                sampled_pred_mask = mask_pred_argmax
+                first_pred_mask = mask_pred_argmax.squeeze(0).cpu().numpy()
             
-            # mask_pred_argmax has shape (1, 160, 240)
-            result_tensor[i] = mask_pred_argmax
-            
-            i += 1
-            if i <= 2:
+            if i <= 10:
                  print(f'video_name: {video_name}')
 
-    ## test the result tensor
-    sample_1 = result_tensor[1000].view(-1)
-    sample1_int = sample_1.int()
-    list1 = sample1_int.tolist()
-    
-    sample2 = sampled_pred_mask.view(-1)
-    sample2_int = sample2.int()
-    list2 = sample2_int.tolist()
+            if i == 10:
+                break
 
-    assert list1 == list2, 'something wrong with the result tensor'
+            # mask_pred_argmax has shape (1, 160, 240)
+            tensor_record.append(mask_pred_argmax.cpu())
+
+            i += 1
+
+    # output tensor is a list 2000 tensors, each has shape (1, 160, 240), I want to concatenate them to a tensor with shape (2000, 160, 240)
+    result_tensor = torch.cat(tensor_record, dim=0)
+    # check the shape of the result tensor
+    print(f'Result tensor shape: {result_tensor.shape}') # (2000, 160, 240)
+
+    assert result_tensor.shape == (2000, 160, 240), 'Result tensor shape is not correct'
+    assert np.array_equal(first_pred_mask, result_tensor[0].squeeze(0).cpu().numpy()), 'First predicted mask is not correct'
     
     return result_tensor
 
@@ -135,9 +147,13 @@ if __name__ == '__main__':
     seg_model.to(device)
     seg_model.load_state_dict(torch.load(args.saved_seg_model_dir, map_location=device))
 
+    # Initialize the Reconstructor model
+    recons_model = VideoFrameReconstructor_LessDownSample(C=3, num_frames=11, LSTM_hidden_size=args.LSTM_hidden_size, num_layers = args.num_layers)
+    recons_model.to(device)
+    recons_model.load_state_dict(torch.load(args.saved_recon_model_dir, map_location=device))
+
     # Inference
-    inference_result = inferece(seg_model, device, args.root_dir)
-    print(f'Inference result shape: {inference_result.shape}')
-    
-    # save the result tensor
-    torch.save(inference_result, 'final_leaderboard_team_35.pt')
+    inference_result = inferece(seg_model, recons_model, device, args.root_dir)
+    inference_result = inference_result.numpy()
+    print(f'Inference result shape: {inference_result.shape}') # (2000, 160, 240)
+    # np.save('inference_result.npy', inference_result)

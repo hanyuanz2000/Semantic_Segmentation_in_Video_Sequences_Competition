@@ -12,13 +12,13 @@ Our goal is to utilize this dataset to create a model that accurately predicts t
 ## Approaches
 We are exploring three main approaches to address this challenge:
 
-### 1. Direct Prediction Using U-Net (Supervised Learning)
-- **Description**: This approach involves using only the labeled training data with a U-Net architecture. Considering the limited training data, we concatenate the first 11 frames along the channel dimension to get a 33x240x160 tensor as input.
-- **Rationale**: U-Net is known for its effectiveness in semantic segmentation, especially when dealing with limited data.
+### 1. Baseline Direct Prediction Using U-Net (Supervised Learning)
+- **Description**: This approach involves using only the labeled training data with a U-Net architecture. We diretly train a Unet with the labeled data, and use the segmenatation result of the 11th frame as our mask prediction on the 22nd frame.
+- **Rationale**: U-Net is known for its effectiveness in semantic segmentation, especially when dealing with limited data. 
 
 ### 2. Dual-Phase Training Integrating Self-supervised and Supervised Learning
 
-- **Brief Description**: The strategy involves two distinct phases. In the first phase, the goal is to predict the 22nd frame from the initial 11 frames using both unlabeled and labeled datasets. In the second phase, the focus shifts to predicting the segmentation mask of the 22nd frame, building upon the work of the first phase.
+- **Brief Description**: This method employs a U-Net architecture solely utilizing labeled training data. The process involves directly training a U-Net model with labeled data, aiming to predict the segmentation mask for the 22nd frame based on the ground truth 11th frame.
 - **Rationale**: This methodology aims to harness both labeled and unlabeled data effectively, thereby potentially enhancing the model's performance through a comprehensive learning approach.
 
 - **Detailed Description**:
@@ -36,11 +36,8 @@ We are exploring three main approaches to address this challenge:
    - **Integration of Phases:** The spatial understanding gained in the first phase is combined with U-Net's capabilities to enhance mask prediction accuracy.
    - **Segmentation Head:** A specialized segmentation head is used to refine and finalize the mask prediction.
 
-### Conclusion
-
-This two-phase approach strategically aligns the model's strengths with each phase's objectives. By balancing computational efficiency and the ability to capture both spatial and temporal dynamics, this strategy is poised to optimize overall performance in semantic segmentation of video sequences.
-
 ## Evaluation
-The performance of our models will be evaluated based on the Intersection over Union (IoU) between the predicted segmentation masks and the ground truth for the hidden test set.
+Our models' efficacy will be rigorously assessed utilizing the Jaccard Index, which compares the congruence between the predicted segmentation masks and the actual ground truth within the validation set and another concealed hidden test set.
 
-## Repository Structure
+## Results
+The Dual-Phase model registers a validation Jaccard Index of 0.16, in contrast to the baseline model, which attains a validation Jaccard Index of 0.24. This notable disparity predominantly stems from the inadequate quality of the reconstruction of the 22nd frame.
