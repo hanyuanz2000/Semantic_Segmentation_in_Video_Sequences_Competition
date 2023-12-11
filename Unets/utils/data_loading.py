@@ -131,7 +131,7 @@ class Labeled_Segementation_Dataset(Dataset):
         return frames, mask
 
 class Hidden_Dataset(Dataset):
-    def __init__(self, root_dir, transform=None):
+    def __init__(self, root_dir, subset, transform=None):
         """
         Args:
             root_dir (string): Directory with all the videos (subfolders).
@@ -140,7 +140,7 @@ class Hidden_Dataset(Dataset):
         """
         self.root_dir = root_dir
         self.transform = transform
-        self.subset = 'hidden'
+        self.subset = subset
         subset_dir = os.path.join(root_dir, self.subset)
         self.video_folders = [f for f in sorted(os.listdir(subset_dir)) if os.path.isdir(os.path.join(subset_dir, f))]
 
@@ -153,7 +153,14 @@ class Hidden_Dataset(Dataset):
 
         # Load the first 11 frames
         frames = [Image.open(os.path.join(video_path, f'image_{i}.png')).convert('RGB') for i in range(11)]
-        frames = torch.stack([transforms.ToTensor()(frame) for frame in frames])
+        mask = torch.zeros(160, 240)
+        
+        if self.transform:
+            frames, mask = self.transform(frames, mask)
+            frames = torch.stack(frames)
+        else:
+            frames = torch.stack([transforms.ToTensor()(frame) for frame in frames])
+            mask = mask.float()
 
         return frames, torch.zeros(1), video_folder
 

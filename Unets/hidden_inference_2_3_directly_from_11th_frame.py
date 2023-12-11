@@ -25,8 +25,8 @@ import numpy as np
 def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
-    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/best_model_epoch_11.pth', help='Directory to save the trained model')
-    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_Reconstructor/checkpoints/recons_best_model_07.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unets_best_model_epoch_11.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_Reconstructor/checkpoints/recon_best_model_71.pth', help='Directory to save the trained model')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
 
@@ -41,21 +41,20 @@ def inferece(
     # Initialize the dataset
     hidden_dataset = data_loading.Hidden_Dataset(
         root_dir=root_dir,
+        subset='hidden',
         transform=customized_transform.SegmentationValidationTransform())
 
     # Initialize the dataloader
-    hidden_loader = DataLoader(hidden_dataset, batch_size=1, shuffle=True)
+    hidden_loader = DataLoader(hidden_dataset, batch_size=1, shuffle=False)
 
     seg_model.eval()
-
-    tensor_record = []
+    result_tensor = torch.empty(2000, 160, 240).to(device)
     i = 0
 
     with torch.no_grad():
         for frames, _, video_name in tqdm(hidden_loader, desc="Inference"):
             bs, seq_len, C, H, W = frames.shape
             
-            # conver to (bs, seq_len * C, H, W)
             last_frame = frames[:, -1, :, :, :]
             last_frame = last_frame.to(device, dtype=torch.float32)
             
@@ -63,40 +62,40 @@ def inferece(
             masks_pred_softmax = F.softmax(masks_pred, dim=1) # [1, 49, 160, 240]
             mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1) # [1, 160, 240]
 
-            if i <= 10:
+            if i == 1000:
                 # print shape
-                # print(f'frames shape: {frames.shape}')
-                # print(f'11th (last) frames shape: {last_frame.shape}')
-                # print(f'masks_pred shape: {masks_pred.shape}')
-                # print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
-                # print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
+                print(f'frames shape: {frames.shape}')
+                print(f'11th (last) frames shape: {last_frame.shape}')
+                print(f'masks_pred shape: {masks_pred.shape}')
+                print(f'masks_pred_softmax shape: {masks_pred_softmax.shape}')
+                print(f'mask_pred_argmax shape: {mask_pred_argmax.shape}')
 
                 # visualize the mask and the predicted mask
                 fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 6))
                 plot_frame(axes[0], frames[0, -1, :, :, :], '11th Frame')
                 axes[1].imshow(mask_pred_argmax.squeeze(0).cpu().numpy())
+                axes[1].set_title('Predicted Mask')
                 plt.show()
 
-                first_pred_mask = mask_pred_argmax.squeeze(0).cpu().numpy()
+                sampled_pred_mask = mask_pred_argmax
             
-            if i <= 10:
+            # mask_pred_argmax has shape (1, 160, 240)
+            result_tensor[i] = mask_pred_argmax
+            
+            i += 1
+            if i <= 2:
                  print(f'video_name: {video_name}')
 
-            if i == 10:
-                break
+    ## test the result tensor
+    sample_1 = result_tensor[1000].view(-1)
+    sample1_int = sample_1.int()
+    list1 = sample1_int.tolist()
+    
+    sample2 = sampled_pred_mask.view(-1)
+    sample2_int = sample2.int()
+    list2 = sample2_int.tolist()
 
-            # mask_pred_argmax has shape (1, 160, 240)
-            tensor_record.append(mask_pred_argmax.cpu())
-
-            i += 1
-
-    # output tensor is a list 2000 tensors, each has shape (1, 160, 240), I want to concatenate them to a tensor with shape (2000, 160, 240)
-    result_tensor = torch.cat(tensor_record, dim=0)
-    # check the shape of the result tensor
-    print(f'Result tensor shape: {result_tensor.shape}') # (2000, 160, 240)
-
-    assert result_tensor.shape == (2000, 160, 240), 'Result tensor shape is not correct'
-    assert np.array_equal(first_pred_mask, result_tensor[0].squeeze(0).cpu().numpy()), 'First predicted mask is not correct'
+    assert list1 == list2, 'something wrong with the result tensor'
     
     return result_tensor
 
@@ -138,6 +137,7 @@ if __name__ == '__main__':
 
     # Inference
     inference_result = inferece(seg_model, device, args.root_dir)
-    inference_result = inference_result.numpy()
-    print(f'Inference result shape: {inference_result.shape}') # (2000, 160, 240)
-    # np.save('inference_result.npy', inference_result)
+    print(f'Inference result shape: {inference_result.shape}')
+    
+    # save the result tensor
+    torch.save(inference_result, 'final_leaderboard_team_35.pt')

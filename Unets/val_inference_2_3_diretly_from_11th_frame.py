@@ -25,7 +25,7 @@ import numpy as np
 def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
-    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/best_model_epoch_11.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unets_best_model_epoch_11.pth', help='Directory to save the trained model')
     parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/recons_best_model_07.pth', help='Directory to save the trained model')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
@@ -88,12 +88,9 @@ def inferece(
             jaccard_score = jaccard(mask_pred_argmax.squeeze(0), mask.squeeze(0).squeeze(0))
             jaccard_record.append(jaccard_score)
 
-            break
             i += 1
             if i % 100 == 0:
                 print(f'Processed {i} batches')
-            if i == 200:
-                break
         
         jaccard_scores_numpy = [score.cpu().numpy() for score in jaccard_record]
         # Calculate mean using numpy

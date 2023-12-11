@@ -25,8 +25,8 @@ import numpy as np
 def get_args():
     parser = argparse.ArgumentParser(description='Inference on hidden dataset')
     parser.add_argument('--root_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Data', help='Root directory of the dataset')
-    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/best_model_epoch_11.pth', help='Directory to save the trained model')
-    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_with_Unet/checkpoints/recons_best_model_07.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_seg_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/Unets/checkpoints/Unets_best_model_epoch_11.pth', help='Directory to save the trained model')
+    parser.add_argument('--saved_recon_model_dir', type=str, default='/Users/zhanghanyuan/Document/Git/Semantic_Segmentation_in_Video_Sequences_Competition/SSL_convLSTM_Reconstructor/checkpoints/recon_best_model_71.pth', help='Directory to save the trained model')
     parser.add_argument('--LSTM_hidden_size', type=int, default=256, help='LSTM hidden size')
     parser.add_argument('--num_layers', type=int, default=2, help='Number of layers in LSTM')
 
@@ -98,7 +98,7 @@ def inferece(
             i += 1
             if i % 20 == 0:
                 print(f'Processed {i} batches')
-            if i == 200:
+            if i == 400:
                 break
         
         jaccard_scores_numpy = [score.cpu().numpy() for score in jaccard_record]
