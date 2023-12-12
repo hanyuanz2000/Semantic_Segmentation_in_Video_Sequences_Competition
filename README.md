@@ -13,28 +13,26 @@ Our goal is to utilize this dataset to create a model that accurately predicts t
 We are exploring three main approaches to address this challenge:
 
 ### 1. Baseline Direct Prediction Using U-Net (Supervised Learning)
-- **Description**: This approach involves using only the labeled training data with a U-Net architecture. We diretly train a Unet with the labeled data, and use the segmenatation result of the 11th frame as our mask prediction on the 22nd frame.
+- **Description**: This approach involves using only the labeled training data with a U-Net architecture. We diretly train a Unet with the labeled data. For inference, the 11th frame is passed through our Unet model for segmentation.
 - **Rationale**: U-Net is known for its effectiveness in semantic segmentation, especially when dealing with limited data. 
 
 ### 2. Dual-Phase Training Integrating Self-supervised and Supervised Learning
 
-- **Brief Description**: This method employs a U-Net architecture solely utilizing labeled training data. The process involves directly training a U-Net model with labeled data, aiming to predict the segmentation mask for the 22nd frame based on the ground truth 11th frame.
+- **Brief Description**: he strategy involves two distinct phases. In the first phase, the goal is to use a reconstruction model to predict the 22nd frame from the initial 11 frames. The reconstruction model is trained with unlabeled datasets. In the second phase, the focus shifts to predicting the segmentation mask of the 22nd frame with Unet, building upon the work of the first phase.
 - **Rationale**: This methodology aims to harness both labeled and unlabeled data effectively, thereby potentially enhancing the model's performance through a comprehensive learning approach.
 
 - **Detailed Description**:
 
-1. **Self-Supervised Learning Phase:**
+1. **Self-Supervised Learning Phase (Reconstruction Model):**
    - **Task:** Predict the 22nd frame using the first 11 frames (train with unlabeled videos).
-   - **Simplified Encoder:** A streamlined encoder is employed to process each of the first 11 frames, focusing on efficient feature extraction.
+   - **Encoder:** An encoder composed of Conv layers and Maxpooling layers is employed to process each of the first 11 frames, focusing on efficient feature extraction.
    - **Temporal Dynamics Analysis:** The ConvLSTM layer is used to analyze temporal evolution across frames, integrating the extracted features into a coherent temporal sequence.
-   - **Reconstruction Output:** The output from the ConvLSTM layer is then utilized to reconstruct the appearance of the 22nd frame. The output is formatted as (batch size, channels, height, width).
-   - **Efficiency Focus:** This phase emphasizes computational efficiency and effective temporal feature capture without the complexity of U-Net.
+   - **Decoder:** The last hiden layer generated from the ConvLSTM is then pass to decoder, which is composed of A bilinear upsampling and few convs. In this way, we can generate the reconstructed 22nd frame.
 
-2. **Supervised Learning Phase:**
-   - **Task:** Develop a segmentation mask for the 22nd frame, using the model's understanding from the first phase.
-   - **U-Net Architecture:** Leveraging U-Net's strengths in image segmentation, the model focuses on accurately predicting the segmentation mask of the 22nd frame.
-   - **Integration of Phases:** The spatial understanding gained in the first phase is combined with U-Net's capabilities to enhance mask prediction accuracy.
-   - **Segmentation Head:** A specialized segmentation head is used to refine and finalize the mask prediction.
+2. **Supervised Learning Phase (Segmentation Model):**
+   - **Task:** Predict the semantic segmentation mask
+   - **Traning Data:** Training Data: 22,000 frame and their corresponding Mask from labeled training set (1000 videos and 22 frames for each videp)
+   - **U-Net Architecture:** Utilizes a Unet segmentation model, currently designed to process individual frames without considering object movement
 
 ## Evaluation
 Our models' efficacy will be rigorously assessed utilizing the Jaccard Index, which compares the congruence between the predicted segmentation masks and the actual ground truth within the validation set and another concealed hidden test set.
