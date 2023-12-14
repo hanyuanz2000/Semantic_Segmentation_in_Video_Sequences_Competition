@@ -36,20 +36,6 @@ We are exploring three main approaches to address this challenge:
    - **Traning Data:** Training Data: 22,000 frame and their corresponding Mask from labeled training set (1000 videos and 22 frames for each videp)
    - **U-Net Architecture:** Utilizes a Unet segmentation model, currently designed to process individual frames without considering object movement
 
-## How to run the code (train and inference)
-Your GitHub README section for running the code is quite detailed but could benefit from a few refinements for clarity and professionalism. Here are some suggestions:
-
-1. **Title Refinement**: Use a clearer title. Instead of "How to run the code (train and inference)," consider something more descriptive, like "Training and Inference Instructions."
-
-2. **Formatting and Structure**: Use consistent formatting for directory names and script paths. Also, consider using bullet points for steps and organizing the content for better readability.
-
-3. **Typos and Grammar**: Correct spelling errors (e.g., "optinal" should be "optional," "diretory" should be "directory") and improve the grammar for professionalism.
-
-4. **Clarification of Instructions**: Provide a bit more detail in the optional arguments section, like a brief mention of what kind of arguments one can expect.
-
-5. **Consistency in Naming**: Ensure consistency in script names (e.g., the mismatch between `inference_val_with_reconstuctor.py` and `python inference_hidden_without_reconstuctor.py`).
-
-
 ## Training and Inference Instructions
 
 This section guides you through the process of training and conducting inference using various scripts in our repository.
