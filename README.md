@@ -49,9 +49,6 @@ Your GitHub README section for running the code is quite detailed but could bene
 
 5. **Consistency in Naming**: Ensure consistency in script names (e.g., the mismatch between `inference_val_with_reconstuctor.py` and `python inference_hidden_without_reconstuctor.py`).
 
-Here's a revised version incorporating these suggestions:
-
----
 
 ## Training and Inference Instructions
 
@@ -84,10 +81,6 @@ This section guides you through the process of training and conducting inference
   - Description: This script performs inference on the validation set using only the Segmentation model. It directly uses the 11th frame for inference, bypassing the Reconstructor due to its reconstruction quality limitations.
   - Directory: `Unets`
   - Command: `python inference_val_without_reconstructor.py`
-
----
-
-This revised version aims to make your README section more user-friendly, clear, and professional.
 
 ## Evaluation
 Our models' efficacy will be rigorously assessed utilizing the Jaccard Index, which compares the congruence between the predicted segmentation masks and the actual ground truth within the validation set and another concealed hidden test set.
