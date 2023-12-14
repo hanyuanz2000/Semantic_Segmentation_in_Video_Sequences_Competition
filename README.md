@@ -54,7 +54,7 @@ This section guides you through the process of training and conducting inference
   - Command: `python train.py`
   - Note: For optional arguments, refer to the script documentation.
 
-### Inference Scripts
+### Inference Scripts on the Validation set
 
 - **Inference with Reconstructor (Validation Set)**:
   - Script: [inference_val_with_reconstructor.py](Unets/inference_val_with_reconstructor.py)
@@ -67,6 +67,27 @@ This section guides you through the process of training and conducting inference
   - Description: This script performs inference on the validation set using only the Segmentation model. It directly uses the 11th frame for inference, bypassing the Reconstructor due to its reconstruction quality limitations.
   - Directory: `Unets`
   - Command: `python inference_val_without_reconstructor.py`
+
+### Inference Scripts on the Hidden set
+- **Inference with Reconstructor (Hidden Set)**:
+  - Script: [Unets/inference_hidden_with_reconstuctor.py](Unets/inference_hidden_with_reconstuctor.py)
+  - Description: This script performs inference on the hidden set using both the Reconstructor and Segmentation models. It uses the first 11 frames to predict the 22nd frame, which is then used for segmentation.
+  - Directory: `Unets`
+  - Command: `python inference_val_without_reconstructor.py`
+  - Required Arguments:
+    - `--saved_recon_model_dir`: Path to the saved Reconstructor model.
+    - `--saved_seg_model_dir`: Path to the saved Segmentation model.
+    - `--root_dir`: Path to the root directory containing the dataset. The hidden set should be located at [Data/hidden](Data/hidden).
+
+- **Inference without Reconstructor (Hidden Set)**:
+  - Script: [Unets/inference_hidden_with_reconstuctor.py](Unets/inference_hidden_with_reconstuctor.py)
+  - Description: This script performs inference on the hidden set using only using Segmentation models. The 11th frame will be directly used to predict the 22nd frame.
+  - Directory: `Unets`
+  - Command: `python inference_val_with_reconstructor.py`
+  - Required Arguments:
+    - `--saved_seg_model_dir`: Path to the saved Segmentation model.
+    - `--root_dir`: Path to the root directory containing the dataset. The hidden set should be located at [Data/hidden](Data/hidden).
+
 
 ## Evaluation
 Our models' efficacy will be rigorously assessed utilizing the Jaccard Index, which compares the congruence between the predicted segmentation masks and the actual ground truth within the validation set and another concealed hidden test set.
