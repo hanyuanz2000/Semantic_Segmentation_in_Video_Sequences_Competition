@@ -70,7 +70,7 @@ def inferece(
             masks_pred_softmax = F.softmax(masks_pred, dim=1) # [1, 49, 160, 240]
             mask_pred_argmax = torch.argmax(masks_pred_softmax, dim=1) # [1, 160, 240]
 
-            if i == 1000:
+            if i == 880:
                 # print shape
                 print(f'frames shape: {frames.shape}')
                 print(f'11th (last) frames shape: {last_frame.shape}')
@@ -95,7 +95,7 @@ def inferece(
                  print(f'video_name: {video_name}')
 
     ## test the result tensor
-    sample_1 = result_tensor[1000].view(-1)
+    sample_1 = result_tensor[880].view(-1)
     sample1_int = sample_1.int()
     list1 = sample1_int.tolist()
     
@@ -148,4 +148,4 @@ if __name__ == '__main__':
     print(f'Inference result shape: {inference_result.shape}')
     
     # save the result tensor
-    torch.save(inference_result, 'final_leaderboard_team_35.pt')
+    torch.save(inference_result, 'final_leaderboard_team_33_.pt')

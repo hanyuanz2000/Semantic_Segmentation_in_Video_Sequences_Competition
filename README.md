@@ -39,3 +39,7 @@ Our models' efficacy will be rigorously assessed utilizing the Jaccard Index, wh
 
 ## Results
 The Dual-Phase model registers a validation Jaccard Index of 0.16, in contrast to the baseline model, which attains a validation Jaccard Index of 0.24. This notable disparity predominantly stems from the inadequate quality of the reconstruction of the 22nd frame.
+
+## Reference Repo
+- https://github.com/milesial/Pytorch-UNet
+- https://github.com/ndrplz/ConvLSTM_pytorch
